@@ -37,11 +37,22 @@ useEffect(() => {
 
 ```ts
 createFluid(canvas, {
-  render?: RenderMode            // dye() | threshold({...}) | custom({...}); default dye()
+  render?: RenderMode   // dye() | threshold() | displacement() | custom(); default dye()
   emitters?: {
-    pointer?: boolean            // mouse/touch splats, default true
-    ambient?: { strength: number } // autonomous motion, ~0.2–0.5; default off
+    pointer?: boolean | {
+      color?: Color | Color[]  // fixed color or palette cycled per pointer; omit = rainbow
+      intensity?: number       // dye per splat, default 0.15 (raise for threshold looks)
+      radius?: number          // multiplier on splatRadius, default 1
+      dragOnly?: boolean       // true = only while pressed; default false (hover emits)
+    }
+    ambient?: boolean | {      // autonomous wanderers, motion without interaction
+      strength?: number        // ~0.2–0.5
+      count?: number           // default 3
+      colors?: Color[]         // palette; omit = rainbow drift
+      radius?: number          // multiplier on splatRadius, default 0.6
+    }
   }
+  onFrame?: (t, dt) => void    // per-frame hook — drive emitters here, no own rAF needed
   respectReducedMotion?: boolean // default true — leave it on
   // ...plus any sim param below as an initial value
 })
@@ -55,7 +66,8 @@ fluid.pause(); fluid.resume(); fluid.destroy()
 
 Sim params (defaults): `simResolution` 128, `dyeResolution` 1024, `curl` 30,
 `pressureIterations` 20, `pressure` 0.8, `velocityDissipation` 0.2,
-`densityDissipation` 1.0, `gravity` 0, `splatRadius` 0.25, `splatForce` 6000.
+`densityDissipation` 1.0, `gravity` 0, `wind` 0 (horizontal dye drift, ± texels/s),
+`speed` 1 (time scale — 0.5 = slow motion), `splatRadius` 0.25, `splatForce` 6000.
 
 ## Choosing a look — the two aesthetics
 
@@ -72,12 +84,29 @@ that makes it read as *liquid* instead of smoke — use all three together:
 threshold({
   levels: [                      // up to 8, lowest cutoff first = outermost color
     { cutoff: 0.35, color: '#f4a8c6' },
-    { cutoff: 0.7,  color: '#ee5a95' },
+    { cutoff: 0.7,  color: '#ee5a95', alpha: 0.9 },  // per-level opacity
     { cutoff: 1.6,  color: '#fff3f8' },  // dense core reads as foam/highlight
   ],
   background: 'transparent',     // or any hex — transparent composites over page content
+  outline: { color: '#16091f', width: 3, opacity: 1 }, // comic/sticker stroke on level edges
+  softness: 1,                   // 1 = crisp edges (default); 3–8 = soft blobby edges
 })
 ```
+Outline looks best with the metaball recipe (low dyeResolution) — on high-res turbulent
+dye it traces every wisp and reads as scribble.
+
+**Refraction (`displacement()`):** the flow distorts an image/canvas — glassy hover effects:
+```ts
+displacement({
+  source: '/poster.jpg',   // URL (CORS) or any TexImageSource (canvas, img, bitmap)
+  strength: 12,            // distortion amount; >30 shreds the image
+  chromatic: 0.6,          // 0..1 RGB fringe separation
+})
+// pair with params { curl: 4, velocityDissipation: 0.3 } for glassy ripples
+```
+
+**Dye options:** `dye({ brightness: 1.4, background: '#0b0b12' })` — brightness multiplies
+the smoke; background composites in-shader ('transparent' default).
 
 ## Recipes for landing pages
 

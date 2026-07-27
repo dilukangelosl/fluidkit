@@ -18,6 +18,10 @@ export interface FluidParams {
   densityDissipation: number
   /** Downward drift of dye (sim texels/s) + mass-weighted pull on velocity. 0 = off; try 100–400 for pours. */
   gravity: number
+  /** Horizontal drift of dye (sim texels/s). Positive = rightward. Fog/steam side-drift. */
+  wind: number
+  /** Simulation time scale. 1 = realtime, 0.5 = slow motion, 2 = double speed. */
+  speed: number
   /** Default splat radius (fraction of canvas). */
   splatRadius: number
   /** Pointer delta → velocity multiplier. */
@@ -33,6 +37,8 @@ export const DEFAULTS: FluidParams = {
   velocityDissipation: 0.2,
   densityDissipation: 1.0,
   gravity: 0,
+  wind: 0,
+  speed: 1,
   splatRadius: 0.25,
   splatForce: 6000,
 }

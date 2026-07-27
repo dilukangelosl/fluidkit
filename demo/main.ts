@@ -1,4 +1,4 @@
-import { createFluid, dye, threshold, custom, DEFAULTS, type RenderMode } from '../src/index.js'
+import { createFluid, dye, threshold, custom, displacement, DEFAULTS, type RenderMode } from '../src/index.js'
 
 const canvas = document.getElementById('c') as HTMLCanvasElement
 
@@ -123,6 +123,7 @@ void main () {
         { cutoff: 0.4, color: '#f0e9ff' },
       ],
       background: 'transparent',
+      outline: { color: '#16091f', width: 3 }, // sticker stroke — crisp on metaball edges
     }),
     background: 'radial-gradient(circle at 30% 20%, #17102a, #0a0710)',
     params: { dyeResolution: 128, curl: 0, densityDissipation: 2.2, velocityDissipation: 0.6, splatRadius: 0.6, splatForce: 4000 },
@@ -176,6 +177,12 @@ void main () {
     params: { curl: 20, densityDissipation: 0.4, velocityDissipation: 0.1 },
   },
 
+  // Refraction: the flow field distorts a poster texture with chromatic aberration.
+  refract: {
+    render: displacement({ source: makePoster(), strength: 12, chromatic: 0.6 }),
+    params: { curl: 4, velocityDissipation: 0.3 }, // low curl = glassy ripples, not shredding
+  },
+
   // Landing-page hero: buoyant liquid blobs drift behind big typography.
   hero: {
     render: threshold({
@@ -197,6 +204,27 @@ void main () {
       }
     },
   },
+}
+
+// Procedural poster for the displacement demo — any image/canvas/URL works.
+function makePoster(): HTMLCanvasElement {
+  const c = document.createElement('canvas')
+  c.width = c.height = 1024
+  const g = c.getContext('2d')!
+  const grad = g.createLinearGradient(0, 0, 1024, 1024)
+  grad.addColorStop(0, '#1a1040')
+  grad.addColorStop(0.5, '#4a1f7a')
+  grad.addColorStop(1, '#0b3954')
+  g.fillStyle = grad
+  g.fillRect(0, 0, 1024, 1024)
+  g.font = '900 175px system-ui'
+  g.textAlign = 'center'
+  g.textBaseline = 'middle'
+  for (let i = 0; i < 6; i++) {
+    g.fillStyle = i % 2 ? '#ffffffde' : '#ee5a95cc'
+    g.fillText('FLUID', 512, 105 + i * 165)
+  }
+  return c
 }
 
 function hsv015(h: number): [number, number, number] {

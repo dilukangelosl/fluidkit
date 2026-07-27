@@ -6,16 +6,41 @@ import * as sh from './shaders.js'
 import { dye, type RenderMode } from './render.js'
 import { DEFAULTS, parseColor, hsv, computeResolution, type FluidParams, type Color } from './utils.js'
 
-export { dye, threshold, custom } from './render.js'
-export type { RenderMode, ThresholdLevel, ThresholdOptions, CustomOptions } from './render.js'
+export { dye, threshold, custom, displacement } from './render.js'
+export type {
+  RenderMode, ThresholdLevel, ThresholdOptions, CustomOptions,
+  DyeOptions, DisplacementOptions,
+} from './render.js'
 export { DEFAULTS, parseColor, computeResolution } from './utils.js'
 export type { FluidParams, Color } from './utils.js'
 
+export interface PointerOptions {
+  /** Fixed color, palette cycled per pointer, or omit for rainbow. */
+  color?: Color | Color[]
+  /** Dye amount per splat (default 0.15). Higher = denser trails. */
+  intensity?: number
+  /** Multiplier on params.splatRadius for pointer splats. Default 1. */
+  radius?: number
+  /** Only emit while a button/finger is down (default false = emit on hover too). */
+  dragOnly?: boolean
+}
+
+export interface AmbientOptions {
+  /** Force of the wandering emitters. ~0.2–0.5. */
+  strength?: number
+  /** Number of wanderers. Default 3. */
+  count?: number
+  /** Palette cycled across wanderers; omit for rainbow drift. */
+  colors?: Color[]
+  /** Multiplier on params.splatRadius for ambient splats. Default 0.6. */
+  radius?: number
+}
+
 export interface EmitterOptions {
-  /** Mouse/touch splats (multi-touch aware). Default true. */
-  pointer?: boolean
-  /** Curl-ish ambient wander for motion without interaction. Default off. */
-  ambient?: boolean | { strength?: number }
+  /** Mouse/touch splats (multi-touch aware). Default true. Pass an object for full control. */
+  pointer?: boolean | PointerOptions
+  /** Wandering emitters for motion without interaction. Default off. */
+  ambient?: boolean | AmbientOptions
 }
 
 export interface FluidOptions extends Partial<FluidParams> {
@@ -25,6 +50,8 @@ export interface FluidOptions extends Partial<FluidParams> {
   emitters?: EmitterOptions
   /** When the user prefers reduced motion, stay paused (default true). */
   respectReducedMotion?: boolean
+  /** Called every frame before the sim step — the place to drive emitters. */
+  onFrame?: (t: number, dt: number) => void
 }
 
 export interface SplatOptions {
@@ -127,6 +154,7 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
 
   function setRenderMode(mode: RenderMode) {
     if (displayProg) gl!.deleteProgram(displayProg.program)
+    if (renderMode !== mode) renderMode.dispose?.(gl!)
     displayProg = createProgram(gl!, sh.baseVertex, mode.frag)
     renderMode = mode
   }
@@ -192,14 +220,14 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
     un = u(progs.advection)
     simTexel(un)
     gl!.uniform1f(un.dt, dt)
-    gl!.uniform1f(un.sink, 0)
+    gl!.uniform2f(un.drift, 0, 0)
     gl!.uniform1i(un.uVelocity, velocity.read.attach(0))
     gl!.uniform1i(un.uSource, velocity.read.attach(0))
     gl!.uniform1f(un.dissipation, params.velocityDissipation)
     blit(velocity.write)
     velocity.swap()
 
-    gl!.uniform1f(un.sink, params.gravity)
+    gl!.uniform2f(un.drift, params.wind, params.gravity)
     gl!.uniform1i(un.uVelocity, velocity.read.attach(0))
     gl!.uniform1i(un.uSource, dyeField.read.attach(1))
     gl!.uniform1f(un.dissipation, params.densityDissipation)
@@ -248,17 +276,34 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
   // ---- emitters ----
   const emitterOpts = options.emitters ?? {}
   const pointerEnabled = emitterOpts.pointer !== false
-  const ambientStrength =
-    emitterOpts.ambient === true ? 0.2
-    : typeof emitterOpts.ambient === 'object' ? (emitterOpts.ambient.strength ?? 0.2)
-    : 0
+  const pOpts: PointerOptions = typeof emitterOpts.pointer === 'object' ? emitterOpts.pointer : {}
+  const pIntensity = pOpts.intensity ?? 0.15
+  const pRadiusMul = pOpts.radius ?? 1
+  const pPalette: [number, number, number][] | null = pOpts.color
+    ? (Array.isArray(pOpts.color) && Array.isArray(pOpts.color[0])
+        ? (pOpts.color as Color[]).map(parseColor)
+        : typeof pOpts.color === 'string' || typeof pOpts.color[0] === 'number'
+          ? [parseColor(pOpts.color as Color)]
+          : (pOpts.color as Color[]).map(parseColor))
+    : null
+
+  const aOpts: AmbientOptions | null =
+    emitterOpts.ambient === true ? {}
+    : typeof emitterOpts.ambient === 'object' ? emitterOpts.ambient
+    : null
+  const ambientStrength = aOpts ? (aOpts.strength ?? 0.2) : 0
+  const ambientRadiusMul = aOpts?.radius ?? 0.6
+  const ambientPalette = aOpts?.colors?.map(parseColor)
 
   const pointers = new Map<number, { x: number; y: number }>()
   function pointerColor(id: number): [number, number, number] {
-    const [r, g, b] = hsv(performance.now() * 0.00005 + id * 0.61, 1, 1)
-    return [r * 0.15, g * 0.15, b * 0.15]
+    const [r, g, b] = pPalette
+      ? pPalette[id % pPalette.length]
+      : hsv(performance.now() * 0.00005 + id * 0.61, 1, 1)
+    return [r * pIntensity, g * pIntensity, b * pIntensity]
   }
   function onPointerMove(e: PointerEvent) {
+    if (pOpts.dragOnly && e.buttons === 0) return
     const rect = canvas.getBoundingClientRect()
     if (rect.width === 0 || rect.height === 0) return
     const x = (e.clientX - rect.left) / rect.width
@@ -269,21 +314,24 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
     const dy = (y - p.y) * params.splatForce
     p.x = x; p.y = y
     if (dx !== 0 || dy !== 0)
-      splatQueue.push({ x, y, dx, dy, color: pointerColor(e.pointerId), radius: params.splatRadius })
+      splatQueue.push({ x, y, dx, dy, color: pointerColor(e.pointerId), radius: params.splatRadius * pRadiusMul })
   }
   function onPointerEnd(e: PointerEvent) { pointers.delete(e.pointerId) }
 
-  // ponytail: 3 lissajous wanderers stand in for curl noise — swap in simplex-curl if the paths read as too orbital
-  const agents = [0, 1, 2].map(i => ({ seed: 17.3 * (i + 1), px: NaN, py: NaN }))
+  // ponytail: lissajous wanderers stand in for curl noise — swap in simplex-curl if the paths read as too orbital
+  const agents = Array.from({ length: aOpts?.count ?? 3 }, (_, i) => ({ seed: 17.3 * (i + 1), px: NaN, py: NaN }))
   function ambientStep(t: number) {
-    for (const a of agents) {
+    for (let i = 0; i < agents.length; i++) {
+      const a = agents[i]
       const x = 0.5 + 0.38 * Math.sin(t * 0.21 + a.seed) * Math.sin(t * 0.117 + a.seed * 2.7)
       const y = 0.5 + 0.38 * Math.sin(t * 0.163 + a.seed * 1.9) * Math.cos(t * 0.141 + a.seed)
       if (!Number.isNaN(a.px)) {
         const dx = (x - a.px) * params.splatForce * ambientStrength * 8
         const dy = (y - a.py) * params.splatForce * ambientStrength * 8
-        const [r, g, b] = hsv(t * 0.02 + a.seed, 0.9, 1)
-        splatQueue.push({ x, y, dx, dy, color: [r * 0.08, g * 0.08, b * 0.08], radius: params.splatRadius * 0.6 })
+        const [r, g, b] = ambientPalette
+          ? ambientPalette[i % ambientPalette.length]
+          : hsv(t * 0.02 + a.seed, 0.9, 1)
+        splatQueue.push({ x, y, dx, dy, color: [r * 0.08, g * 0.08, b * 0.08], radius: params.splatRadius * ambientRadiusMul })
       }
       a.px = x; a.py = y
     }
@@ -331,10 +379,12 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
     lastTime = now
     // ponytail: resize recreates FBOs and drops the current dye — copy-resize like Pavel's if the flash ever matters
     if (resizeIfNeeded()) initFramebuffers()
+    options.onFrame?.(now / 1000, dt)
     if (ambientStrength > 0) ambientStep(now / 1000)
     for (const s of splatQueue) applySplat(s)
     splatQueue.length = 0
-    if (dt > 0) step(dt)
+    const sdt = dt * params.speed
+    if (sdt > 0) step(sdt)
     render(now / 1000)
   }
 
@@ -397,6 +447,7 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
       canvas.removeEventListener('pointercancel', onPointerEnd)
       velocity.dispose(); dyeField.dispose(); pressure.dispose()
       divergence.dispose(); curl.dispose()
+      renderMode.dispose?.(gl!)
       for (const p of Object.values(progs)) gl!.deleteProgram(p.program)
       if (displayProg) gl!.deleteProgram(displayProg.program)
       gl!.deleteBuffer(quadBuf)

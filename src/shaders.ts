@@ -41,8 +41,8 @@ void main () {
 }`
 
 // Semi-Lagrangian advection: walk backwards along the velocity field and sample.
-// `sink` adds a constant downward drift (used for dye when gravity is on — a body force
-// alone gets mostly cancelled by the pressure projection inside large dye masses).
+// `drift` (x = wind, y = gravity) adds a constant dye drift — a body force alone gets
+// mostly cancelled by the pressure projection inside large dye masses.
 export const advectionFrag = /* glsl */ `#version 300 es
 precision highp float;
 in vec2 vUv;
@@ -52,11 +52,12 @@ uniform sampler2D uSource;
 uniform vec2 texelSize;
 uniform float dt;
 uniform float dissipation;
-uniform float sink;
+uniform vec2 drift;
 
 void main () {
     vec2 velocity = texture(uVelocity, vUv).xy;
-    velocity.y -= sink * smoothstep(0.0, 0.05, vUv.y); // fade at the floor so liquid pools, not drains
+    velocity.x += drift.x;
+    velocity.y -= drift.y * smoothstep(0.0, 0.05, vUv.y); // fade at the floor so liquid pools, not drains
     vec2 coord = vUv - dt * velocity * texelSize;
     fragColor = texture(uSource, coord) / (1.0 + dissipation * dt);
 }`

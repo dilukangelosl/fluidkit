@@ -50,10 +50,24 @@ Sim params (all optional in `createFluid` options, all live-tunable via `fluid.p
 
 ### Render modes
 
-- `dye()` — classic smoky multicolor.
-- `threshold({ levels, background })` — up to 8 posterized levels with edge AA (the "Slosh" look).
+- `dye({ brightness, background })` — classic smoky multicolor.
+- `threshold({ levels, background, outline, softness })` — up to 8 posterized levels with
+  per-level alpha, edge AA, and an optional comic/sticker outline stroke (the "Slosh" look).
+- `displacement({ source, strength, chromatic })` — the flow field distorts an image or
+  canvas with optional chromatic aberration (refraction/glass effects).
 - `custom({ frag, uniforms })` — your GLSL ES 3.00 fragment shader; sample `uDye`, `uVelocity`,
   `uPressure`, use `uTime` and `texelSize`.
+
+### Emitters
+
+- `pointer: true | { color, intensity, radius, dragOnly }` — fixed color or palette per
+  pointer, dye density, hover vs drag.
+- `ambient: true | { strength, count, colors, radius }` — configurable autonomous wanderers.
+- `splat()` for anything programmatic, or the `onFrame(t, dt)` option to drive emitters
+  without managing your own loop.
+
+Sim extras: `gravity` (pours), `wind` (side drift), `speed` (slow motion / time scale) —
+all live-tunable via `fluid.params`.
 
 ### Behavior you get for free
 
@@ -70,8 +84,8 @@ The [demo](https://fluidkit-chi.vercel.app/) ships eleven looks, all driven thro
 
 `dye` smoky multicolor · `threshold` posterized purple · `custom` ink-on-paper ·
 `soda` pink liquid pour · `waterfall` raining streams · `fountain` rainbow jet ·
-`goo` metaball cursor · `aurora` hover-reveal · `chrome` liquid iridescence ·
-`contour` living topographic map · `hero` landing-page typography over fluid
+`goo` outlined metaball cursor · `aurora` hover-reveal · `chrome` liquid iridescence ·
+`contour` living topographic map · `refract` image distortion · `hero` typography over fluid
 
 ## Develop
 
