@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>fluidkit demo</title>
+  <link rel="icon" href="data:," />
+  <style>
+    html, body { margin: 0; height: 100%; background: #0b0b12; overflow: hidden; }
+    canvas { width: 100vw; height: 100vh; display: block; touch-action: none; }
+    .ui { position: fixed; top: 12px; left: 12px; display: flex; gap: 8px; font-family: system-ui; }
+    .ui button {
+      background: #ffffff18; color: #fff; border: 1px solid #ffffff30;
+      border-radius: 6px; padding: 6px 14px; cursor: pointer;
+    }
+    .ui button.active { background: #ffffff40; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="ui">
+    <button id="dye" class="active">dye</button>
+    <button id="threshold">threshold</button>
+    <button id="custom">custom</button>
+    <button id="soda">soda</button>
+    <button id="waterfall">waterfall</button>
+    <button id="fountain">fountain</button>
+  </div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

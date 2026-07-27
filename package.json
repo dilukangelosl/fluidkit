@@ -1,0 +1,31 @@
+{
+  "name": "fluidkit",
+  "version": "0.1.0",
+  "description": "Framework-agnostic GPU fluid simulation for the web. Decoupled sim engine and pluggable render modes.",
+  "license": "MIT",
+  "author": "Diluk Angelo <dilukangelo@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dilukangelosl/fluidkit.git"
+  },
+  "keywords": ["webgl", "fluid", "simulation", "fluid-simulation", "navier-stokes", "creative-coding", "hero-background", "landing-page"],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./render": { "types": "./dist/render.d.ts", "import": "./dist/render.js" }
+  },
+  "files": ["dist"],
+  "sideEffects": false,
+  "scripts": {
+    "dev": "vite demo",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test test/api.test.ts",
+    "preview": "vite preview demo"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  }
+}
