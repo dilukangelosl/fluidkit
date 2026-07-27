@@ -1,4 +1,4 @@
-import { createFluid, dye, threshold, custom, displacement, DEFAULTS, type RenderMode } from '../src/index.js'
+import { createFluid, dye, threshold, custom, displacement, ramp, textMask, DEFAULTS, type RenderMode } from '../src/index.js'
 
 const canvas = document.getElementById('c') as HTMLCanvasElement
 
@@ -16,6 +16,7 @@ interface Example {
   background?: string
   overlay?: boolean
   light?: boolean // light background — flips nav/footer chrome for contrast
+  enter?(): void // set masks/obstacles; select() clears them before calling
 }
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a)
@@ -177,6 +178,77 @@ void main () {
     params: { curl: 20, densityDissipation: 0.4, velocityDissipation: 0.1 },
   },
 
+  // Neon: the classic look with a glow halo.
+  neon: {
+    render: dye({ glow: 0.9, glowRadius: 32, brightness: 1.1 }),
+    params: { curl: 45, densityDissipation: 1.2 },
+  },
+
+  // Gradient-map: dye density drives a lava color ramp.
+  lava: {
+    render: ramp({ colors: ['#0b0212', '#4a0f5e', '#c0245e', '#ff8a5c', '#ffe8d6'], scale: 1.4 }),
+    params: { curl: 25, densityDissipation: 0.4 },
+  },
+
+  // Wet-jelly slime: threshold + gradient-normal lighting.
+  jelly: {
+    render: threshold({
+      levels: [
+        { cutoff: 0.15, color: '#14380f' },
+        { cutoff: 0.4, color: '#3fae3f' },
+        { cutoff: 1.1, color: '#c7ff9e' },
+      ],
+      background: '#090d07',
+      lighting: { strength: 5, specular: 0.9 },
+    }),
+    background: '#090d07',
+    params: { dyeResolution: 192, curl: 2, densityDissipation: 0.35, velocityDissipation: 0.3, splatRadius: 0.4 },
+  },
+
+  // "Pour from a logo": the word itself bleeds liquid, pulled down by gravity.
+  logo: {
+    render: threshold({
+      levels: [
+        { cutoff: 0.15, color: '#f4a8c6' },
+        { cutoff: 0.4, color: '#ee5a95' },
+        { cutoff: 1.0, color: '#fff3f8' },
+      ],
+      background: '#f6eee3',
+    }),
+    background: '#f6eee3',
+    light: true,
+    params: { dyeResolution: 256, curl: 3, gravity: 120, densityDissipation: 0.45, velocityDissipation: 0.2 },
+    enter() {
+      fluid.setEmitterMask(textMask('fluidkit', { size: 0.32, weight: 900 }), {
+        color: [0.5, 0.18, 0.3],
+        strength: 8,
+      })
+    },
+  },
+
+  // Obstacle: water pours over the invisible word FLOW — the letters appear as negative space.
+  collide: {
+    render: threshold({
+      levels: [
+        { cutoff: 0.06, color: '#123a5e' },
+        { cutoff: 0.18, color: '#2e7dbd' },
+        { cutoff: 0.45, color: '#bfe8ff' },
+      ],
+      background: '#08121f',
+    }),
+    background: '#08121f',
+    params: { dyeResolution: 512, curl: 8, gravity: 240, densityDissipation: 0.3, velocityDissipation: 0.1 },
+    enter() {
+      fluid.setObstacle(textMask('FLOW', { size: 0.42, weight: 900 }))
+    },
+    tick() {
+      for (let i = 0; i < 2; i++) {
+        fluid.splat(rnd(0.2, 0.8), 0.95, rnd(-20, 20), rnd(-500, -300),
+          { color: [0.08, 0.13, 0.18], radius: 0.12 })
+      }
+    },
+  },
+
   // Refraction: the flow field distorts a poster texture with chromatic aberration.
   refract: {
     render: displacement({ source: makePoster(), strength: 12, chromatic: 0.6 }),
@@ -243,11 +315,15 @@ let active: Example = examples.dye
 function select(name: string) {
   active = examples[name]
   fluid.setRenderMode(active.render)
+  fluid.setEmitterMask(null)
+  fluid.setObstacle(null)
   Object.assign(fluid.params, DEFAULTS, active.params)
+  active.enter?.()
   document.body.style.background = active.background ?? '#0b0b12'
   document.body.classList.toggle('light', !!active.light)
   overlay.hidden = !active.overlay
   nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.name === name))
+  syncPanel()
 }
 
 for (const name of Object.keys(examples)) {
@@ -257,6 +333,63 @@ for (const name of Object.keys(examples)) {
   b.addEventListener('click', () => select(name))
   nav.appendChild(b)
 }
+
+// ---- playground panel: live sliders for every sim param + copy-config ----
+const SLIDERS: [keyof typeof fluid.params, number, number, number][] = [
+  ['curl', 0, 60, 1],
+  ['pressureIterations', 1, 60, 1],
+  ['velocityDissipation', 0, 4, 0.05],
+  ['densityDissipation', 0, 4, 0.05],
+  ['gravity', 0, 600, 10],
+  ['wind', -400, 400, 10],
+  ['speed', 0.1, 2, 0.05],
+  ['splatRadius', 0.05, 1, 0.01],
+  ['splatForce', 1000, 12000, 100],
+]
+const panel = document.getElementById('panel')!
+const sliderEls = new Map<string, { input: HTMLInputElement; label: HTMLElement }>()
+for (const [key, min, max, step] of SLIDERS) {
+  const label = document.createElement('label')
+  const nameSpan = document.createElement('span')
+  nameSpan.textContent = key
+  const valSpan = document.createElement('span')
+  label.append(nameSpan, valSpan)
+  const input = document.createElement('input')
+  input.type = 'range'
+  input.min = String(min)
+  input.max = String(max)
+  input.step = String(step)
+  input.addEventListener('input', () => {
+    fluid.params[key] = Number(input.value)
+    valSpan.textContent = input.value
+  })
+  panel.append(label, input)
+  sliderEls.set(key, { input, label: valSpan })
+}
+const copyBtn = document.createElement('button')
+copyBtn.className = 'copy'
+copyBtn.textContent = 'copy config'
+copyBtn.addEventListener('click', () => {
+  const diff: Record<string, number> = {}
+  for (const [k, v] of Object.entries(fluid.params))
+    if (v !== DEFAULTS[k as keyof typeof DEFAULTS]) diff[k] = v
+  navigator.clipboard.writeText(JSON.stringify(diff, null, 2))
+  copyBtn.textContent = 'copied!'
+  setTimeout(() => { copyBtn.textContent = 'copy config' }, 1200)
+})
+panel.append(copyBtn)
+
+function syncPanel() {
+  for (const [key, { input, label }] of sliderEls) {
+    const v = fluid.params[key as keyof typeof fluid.params]
+    input.value = String(v)
+    label.textContent = String(Math.round(v * 100) / 100)
+  }
+}
+document.getElementById('tune-toggle')!.addEventListener('click', () => {
+  panel.hidden = !panel.hidden
+  if (!panel.hidden) syncPanel()
+})
 select('dye')
 
 function drive(now: number) {

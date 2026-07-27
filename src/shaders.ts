@@ -53,11 +53,15 @@ uniform vec2 texelSize;
 uniform float dt;
 uniform float dissipation;
 uniform vec2 drift;
+uniform sampler2D uObstacle; // 1x1 transparent when no obstacle is set
 
 void main () {
+    vec4 om = texture(uObstacle, vUv);
+    float solid = clamp(om.a * max(om.r, max(om.g, om.b)) * 4.0, 0.0, 1.0);
     vec2 velocity = texture(uVelocity, vUv).xy;
     velocity.x += drift.x;
     velocity.y -= drift.y * smoothstep(0.0, 0.05, vUv.y); // fade at the floor so liquid pools, not drains
+    velocity *= 1.0 - solid; // nothing advects into or out of solid regions
     vec2 coord = vUv - dt * velocity * texelSize;
     fragColor = texture(uSource, coord) / (1.0 + dissipation * dt);
 }`

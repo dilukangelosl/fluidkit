@@ -137,6 +137,7 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
   let divergence: FBO, curl: FBO
   let renderMode: RenderMode = options.render ?? dye()
   let appliedSimRes = 0, appliedDyeRes = 0
+  let nullTex: WebGLTexture // 1x1 transparent — stands in when no obstacle is set
 
   function initGL() {
     if (!gl!.getExtension('EXT_color_buffer_float'))
@@ -152,6 +153,11 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
     gl!.bufferData(gl!.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 0, 2, 3]), gl!.STATIC_DRAW)
     gl!.vertexAttribPointer(0, 2, gl!.FLOAT, false, 0, 0)
     gl!.enableVertexAttribArray(0)
+
+    nullTex = gl!.createTexture()!
+    gl!.activeTexture(gl!.TEXTURE0)
+    gl!.bindTexture(gl!.TEXTURE_2D, nullTex)
+    gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, 1, 1, 0, gl!.RGBA, gl!.UNSIGNED_BYTE, new Uint8Array(4))
 
     progs = {
       copy: createProgram(gl!, sh.baseVertex, sh.copyFrag),
@@ -277,6 +283,9 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
     simTexel(un)
     gl!.uniform1f(un.dt, dt)
     gl!.uniform2f(un.drift, 0, 0)
+    gl!.activeTexture(gl!.TEXTURE2)
+    gl!.bindTexture(gl!.TEXTURE_2D, obstacleMask ? obstacleMask.tex : nullTex)
+    gl!.uniform1i(un.uObstacle, 2)
     gl!.uniform1i(un.uVelocity, velocity.read.attach(0))
     gl!.uniform1i(un.uSource, velocity.read.attach(0))
     gl!.uniform1f(un.dissipation, params.velocityDissipation)
@@ -291,8 +300,6 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
     dyeField.swap()
 
     if (obstacleMask) {
-      // ponytail: velocity-only obstacle — gravity/wind drift can still seep dye through slowly;
-      // mask the drift in the advection shader if that ever shows
       un = u(progs.obstacle)
       gl!.uniform1i(un.uVelocity, velocity.read.attach(0))
       gl!.activeTexture(gl!.TEXTURE1)
@@ -620,6 +627,7 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
       if (displayProg) gl!.deleteProgram(displayProg.program)
       gl!.deleteBuffer(quadBuf)
       gl!.deleteBuffer(idxBuf)
+      gl!.deleteTexture(nullTex)
     },
   }
 }
