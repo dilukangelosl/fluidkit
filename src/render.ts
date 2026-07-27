@@ -290,11 +290,14 @@ export function displacement(opts: DisplacementOptions): RenderMode {
       }
       gl.activeTexture(gl.TEXTURE3)
       gl.bindTexture(gl.TEXTURE_2D, tex)
-      if (source && !uploaded) {
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true) // match uv y-up
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source)
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
-        uploaded = true
+      const isVideo = typeof HTMLVideoElement !== 'undefined' && source instanceof HTMLVideoElement
+      if (source && (!uploaded || isVideo)) {
+        if (!isVideo || (source as HTMLVideoElement).readyState >= 2) {
+          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true) // match uv y-up
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source)
+          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
+          uploaded = true // videos re-upload every frame via the isVideo branch
+        }
       }
       gl.uniform1i(u.uSource, 3)
       gl.uniform1f(u.uStrength, strength)

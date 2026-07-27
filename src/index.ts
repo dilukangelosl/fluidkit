@@ -52,6 +52,8 @@ export interface FluidOptions extends Partial<FluidParams> {
   respectReducedMotion?: boolean
   /** Called every frame before the sim step — the place to drive emitters. */
   onFrame?: (t: number, dt: number) => void
+  /** Halve dyeResolution (floor 256) under sustained frame overruns. Default true. */
+  autoQuality?: boolean
 }
 
 export interface SplatOptions {
@@ -65,6 +67,10 @@ export interface Fluid {
   /** Inject a droplet. x/y in [0,1] (y up), dx/dy velocity (pointer-flick scale ≈ 0–1000). */
   splat(x: number, y: number, dx: number, dy: number, opts?: SplatOptions): void
   setRenderMode(mode: RenderMode): void
+  /** Clear all fields back to still, empty fluid. */
+  reset(): void
+  /** Render a frame and return it as a PNG data URL. */
+  screenshot(): string
   /** Raw field texture for three.js/pixi interop. */
   getTexture(field: 'dye' | 'velocity' | 'pressure'): WebGLTexture
   pause(): void
@@ -111,6 +117,7 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
     gl!.enableVertexAttribArray(0)
 
     progs = {
+      copy: createProgram(gl!, sh.baseVertex, sh.copyFrag),
       splat: createProgram(gl!, sh.baseVertex, sh.splatFrag),
       gravity: createProgram(gl!, sh.baseVertex, sh.gravityFrag),
       advection: createProgram(gl!, sh.baseVertex, sh.advectionFrag),
@@ -127,16 +134,26 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
   }
 
   function initFramebuffers() {
-    velocity?.dispose(); dyeField?.dispose(); pressure?.dispose()
-    divergence?.dispose(); curl?.dispose()
     const simRes = computeResolution(params.simResolution, gl!.drawingBufferWidth, gl!.drawingBufferHeight)
     const dyeRes = computeResolution(params.dyeResolution, gl!.drawingBufferWidth, gl!.drawingBufferHeight)
     const HF = gl!.HALF_FLOAT
+    const oldVelocity = velocity, oldDye = dyeField
+    pressure?.dispose(); divergence?.dispose(); curl?.dispose()
     velocity = createDoubleFBO(gl!, simRes.width, simRes.height, gl!.RG16F, gl!.RG, HF, gl!.LINEAR)
     dyeField = createDoubleFBO(gl!, dyeRes.width, dyeRes.height, gl!.RGBA16F, gl!.RGBA, HF, gl!.LINEAR)
     pressure = createDoubleFBO(gl!, simRes.width, simRes.height, gl!.R16F, gl!.RED, HF, gl!.NEAREST)
     divergence = createFBO(gl!, simRes.width, simRes.height, gl!.R16F, gl!.RED, HF, gl!.NEAREST)
     curl = createFBO(gl!, simRes.width, simRes.height, gl!.R16F, gl!.RED, HF, gl!.NEAREST)
+    if (oldVelocity) {
+      // carry the fields across resize/resolution changes instead of flashing to empty
+      const un = progs.copy.uniforms
+      gl!.useProgram(progs.copy.program)
+      gl!.uniform1i(un.uTexture, oldVelocity.read.attach(0))
+      blit(velocity.write); velocity.swap()
+      gl!.uniform1i(un.uTexture, oldDye.read.attach(0))
+      blit(dyeField.write); dyeField.swap()
+      oldVelocity.dispose(); oldDye.dispose()
+    }
     appliedSimRes = params.simResolution
     appliedDyeRes = params.dyeResolution
   }
@@ -373,10 +390,21 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
     return params.simResolution !== appliedSimRes || params.dyeResolution !== appliedDyeRes
   }
 
+  let frameEma = 0
+  let qualityCounter = 0
   function frame(now: number) {
     raf = shouldRun() ? requestAnimationFrame(frame) : 0
-    const dt = lastTime < 0 ? 0 : Math.min(Math.max((now - lastTime) / 1000, 0), 1 / 30)
+    const rawDt = lastTime < 0 ? 0 : Math.max((now - lastTime) / 1000, 0)
+    const dt = Math.min(rawDt, 1 / 30)
     lastTime = now
+    if (options.autoQuality !== false && rawDt > 0) {
+      frameEma = frameEma ? frameEma * 0.95 + rawDt * 0.05 : rawDt
+      // ponytail: downscale only, no recovery — upscaling oscillates on thermally-throttled phones
+      if (++qualityCounter > 180 && frameEma > 0.03 && params.dyeResolution > 256) {
+        params.dyeResolution = Math.max(256, Math.floor(params.dyeResolution / 2))
+        qualityCounter = 0
+      }
+    }
     // ponytail: resize recreates FBOs and drops the current dye — copy-resize like Pavel's if the flash ever matters
     if (resizeIfNeeded()) initFramebuffers()
     options.onFrame?.(now / 1000, dt)
@@ -391,7 +419,14 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
   const onVisibility = () => ensureLoop()
   const onReducedChange = () => ensureLoop()
   const onContextLost = (e: Event) => { e.preventDefault(); contextLost = true; ensureLoop() }
-  const onContextRestored = () => { contextLost = false; initGL(); ensureLoop() }
+  const onContextRestored = () => {
+    contextLost = false
+    // old FBO handles died with the context — clear them so initFramebuffers doesn't copy from ghosts
+    velocity = dyeField = pressure = undefined as unknown as DoubleFBO
+    divergence = curl = undefined as unknown as FBO
+    initGL()
+    ensureLoop()
+  }
 
   canvas.addEventListener('webglcontextlost', onContextLost)
   canvas.addEventListener('webglcontextrestored', onContextRestored)
@@ -427,6 +462,19 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
       })
     },
     setRenderMode(mode) { setRenderMode(mode) },
+    reset() {
+      gl!.clearColor(0, 0, 0, 0)
+      for (const f of [velocity.read, velocity.write, dyeField.read, dyeField.write,
+                       pressure.read, pressure.write, divergence, curl]) {
+        gl!.bindFramebuffer(gl!.FRAMEBUFFER, f.fbo)
+        gl!.clear(gl!.COLOR_BUFFER_BIT)
+      }
+    },
+    screenshot() {
+      // draw + read in the same task, before the compositor clears the (non-preserved) buffer
+      render(performance.now() / 1000)
+      return canvas.toDataURL('image/png')
+    },
     getTexture(field) {
       const map = { dye: dyeField, velocity, pressure } as const
       return map[field].read.texture

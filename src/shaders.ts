@@ -62,6 +62,16 @@ void main () {
     fragColor = texture(uSource, coord) / (1.0 + dissipation * dt);
 }`
 
+export const copyFrag = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uTexture;
+
+void main () {
+    fragColor = texture(uTexture, vUv);
+}`
+
 // Pulls dye-carrying fluid downward. Weighted by dye density so empty regions stay still.
 export const gravityFrag = /* glsl */ `#version 300 es
 precision highp float;
