@@ -14,11 +14,11 @@ are on the roadmap.
 ## Quickstart
 
 ```sh
-npm install @dilukangelosl/fluidkit
+npm install @dilukangelo/fluidkit
 ```
 
 ```ts
-import { createFluid, threshold } from '@dilukangelosl/fluidkit'
+import { createFluid, threshold } from '@dilukangelo/fluidkit'
 
 const fluid = createFluid(canvas, {
   emitters: { pointer: true, ambient: { strength: 0.2 } },

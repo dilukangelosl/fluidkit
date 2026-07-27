@@ -1,5 +1,5 @@
 {
-  "name": "@dilukangelosl/fluidkit",
+  "name": "@dilukangelo/fluidkit",
   "version": "0.1.0",
   "publishConfig": { "access": "public" },
   "description": "Framework-agnostic GPU fluid simulation for the web. Decoupled sim engine and pluggable render modes.",
@@ -22,6 +22,7 @@
   "scripts": {
     "dev": "vite demo",
     "build": "tsc -p tsconfig.json",
+    "build:demo": "vite build demo",
     "test": "node --test test/api.test.ts",
     "prepublishOnly": "npm test && npm run build",
     "preview": "vite preview demo"
