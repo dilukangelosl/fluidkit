@@ -1,5 +1,7 @@
 # fluidkit
 
+**[Live demo →](https://fluidkit-chi.vercel.app/)** · [npm](https://www.npmjs.com/package/@dilukangelo/fluidkit)
+
 Framework-agnostic GPU fluid simulation for the web. The sim engine (Stable Fluids on WebGL2)
 produces velocity/dye field textures; pluggable render modes consume them — smoky dye, flat
 posterized "sticker" liquid, or your own fragment shader.
@@ -60,6 +62,16 @@ Sim params (all optional in `createFluid` options, all live-tunable via `fluid.p
 - Recovers from WebGL context loss; resizes with the canvas; multiple instances per page;
   `destroy()` releases all GPU resources.
 - SSR-safe: importing the package touches no browser globals.
+
+## Examples
+
+The [demo](https://fluidkit-chi.vercel.app/) ships eleven looks, all driven through the public API
+(source in [`demo/main.ts`](./demo/main.ts) — each is a copy-paste starting point):
+
+`dye` smoky multicolor · `threshold` posterized purple · `custom` ink-on-paper ·
+`soda` pink liquid pour · `waterfall` raining streams · `fountain` rainbow jet ·
+`goo` metaball cursor · `aurora` hover-reveal · `chrome` liquid iridescence ·
+`contour` living topographic map · `hero` landing-page typography over fluid
 
 ## Develop
 

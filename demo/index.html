@@ -3,29 +3,125 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>fluidkit demo</title>
+  <title>fluidkit — GPU fluid simulation for the web</title>
+  <meta name="description" content="Framework-agnostic WebGL2 fluid simulation. Smoky dye, flat sticker-liquid, custom shaders — five lines of code." />
   <link rel="icon" href="data:," />
   <style>
+    :root { --accent1: #8a4fff; --accent2: #ee5a95; }
     html, body { margin: 0; height: 100%; background: #0b0b12; overflow: hidden; }
-    canvas { width: 100vw; height: 100vh; display: block; touch-action: none; }
-    .ui { position: fixed; top: 12px; left: 12px; display: flex; gap: 8px; font-family: system-ui; }
-    .ui button {
-      background: #ffffff18; color: #fff; border: 1px solid #ffffff30;
-      border-radius: 6px; padding: 6px 14px; cursor: pointer;
+    body { font-family: system-ui, -apple-system, sans-serif; }
+    canvas#c { width: 100vw; height: 100vh; display: block; touch-action: none; }
+
+    header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 3;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 20px; gap: 16px;
+      background: linear-gradient(#0007, transparent);
     }
-    .ui button.active { background: #ffffff40; }
+    .brand { display: flex; align-items: baseline; gap: 10px; text-decoration: none; }
+    .brand b {
+      font-size: 1.35rem; letter-spacing: -0.03em; font-weight: 800;
+      background: linear-gradient(90deg, var(--accent1), var(--accent2));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .brand span { color: #ffffff70; font-size: 0.8rem; }
+    .links { display: flex; gap: 10px; align-items: center; }
+    .links a {
+      display: inline-flex; align-items: center; gap: 7px;
+      color: #fff; text-decoration: none; font-size: 0.85rem;
+      background: #ffffff14; border: 1px solid #ffffff26; border-radius: 999px;
+      padding: 7px 14px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      transition: background 0.2s;
+    }
+    .links a:hover { background: #ffffff2e; }
+    .links svg { width: 16px; height: 16px; fill: currentColor; }
+
+    nav#modes {
+      position: fixed; top: 64px; left: 20px; right: 20px; z-index: 3;
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+    nav#modes button {
+      background: #ffffff12; color: #ffffffcc; border: 1px solid #ffffff22;
+      border-radius: 999px; padding: 6px 15px; cursor: pointer; font-size: 0.82rem;
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      transition: all 0.2s;
+    }
+    nav#modes button:hover { color: #fff; background: #ffffff24; }
+    nav#modes button.active {
+      color: #fff; border-color: transparent;
+      background: linear-gradient(90deg, var(--accent1), var(--accent2));
+    }
+
+    footer {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 3;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 20px; font-size: 0.82rem; color: #ffffff80;
+      background: linear-gradient(transparent, #0006);
+      pointer-events: none;
+    }
+    footer a { pointer-events: auto; text-decoration: none; }
+    footer .author {
+      font-weight: 700;
+      background: linear-gradient(90deg, var(--accent1), var(--accent2));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    footer .hint { font-style: italic; }
+
+    #hero-overlay[hidden] { display: none; }
+    #hero-overlay {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; text-align: center;
+      pointer-events: none; z-index: 1; color: #f6eefc;
+    }
+    #hero-overlay h1 {
+      font-size: clamp(4rem, 14vw, 11rem); margin: 0; letter-spacing: -0.04em;
+      font-weight: 800; mix-blend-mode: difference;
+    }
+    #hero-overlay p {
+      font-size: clamp(1rem, 2.2vw, 1.4rem); margin: 0.5em 0 0; opacity: 0.75;
+      mix-blend-mode: difference;
+    }
+    @media (max-width: 640px) {
+      .brand span, footer .hint { display: none; }
+    }
+    /* readable chrome on light example backgrounds */
+    body.light header { background: linear-gradient(#ffffff90, transparent); }
+    body.light footer { background: linear-gradient(transparent, #ffffff90); }
+    body.light .brand span, body.light footer { color: #00000090; }
+    body.light .links a { background: #00000010; color: #111; border-color: #00000025; }
+    body.light nav#modes button { background: #0000000d; color: #000000b0; border-color: #00000020; }
+    body.light nav#modes button:hover { background: #00000020; color: #000; }
+    body.light nav#modes button.active { color: #fff; }
   </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div class="ui">
-    <button id="dye" class="active">dye</button>
-    <button id="threshold">threshold</button>
-    <button id="custom">custom</button>
-    <button id="soda">soda</button>
-    <button id="waterfall">waterfall</button>
-    <button id="fountain">fountain</button>
+
+  <div id="hero-overlay" hidden>
+    <h1>fluidkit</h1>
+    <p>GPU fluid simulation — five lines of code</p>
   </div>
+
+  <header>
+    <a class="brand" href="https://github.com/dilukangelosl/fluidkit">
+      <b>fluidkit</b><span>WebGL2 fluid simulation</span>
+    </a>
+    <div class="links">
+      <a href="https://www.npmjs.com/package/@dilukangelo/fluidkit" target="_blank" rel="noreferrer">npm</a>
+      <a href="https://github.com/dilukangelosl/fluidkit" target="_blank" rel="noreferrer">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.5 7.5 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </header>
+
+  <nav id="modes"></nav>
+
+  <footer>
+    <span>Crafted by <a class="author" href="https://github.com/dilukangelosl" target="_blank" rel="noreferrer">Diluk Angelo</a> · MIT</span>
+    <span class="hint">move your cursor — every mode is interactive</span>
+  </footer>
+
   <script type="module" src="./main.ts"></script>
 </body>
 </html>
