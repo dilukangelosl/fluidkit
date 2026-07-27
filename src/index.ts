@@ -36,11 +36,44 @@ export interface AmbientOptions {
   radius?: number
 }
 
+export type MaskSource = TexImageSource | string
+
+export interface MaskEmitterOptions {
+  /** White-on-transparent (or white-on-black) mask: canvas, image, bitmap, or URL. See textMask(). */
+  source: MaskSource
+  /** Dye color emitted from the mask. Default soft white. */
+  color?: Color
+  /** Dye per second emitted where the mask is opaque. Default 1. */
+  strength?: number
+}
+
 export interface EmitterOptions {
   /** Mouse/touch splats (multi-touch aware). Default true. Pass an object for full control. */
   pointer?: boolean | PointerOptions
   /** Wandering emitters for motion without interaction. Default off. */
   ambient?: boolean | AmbientOptions
+  /** Emit dye from a text/image mask ("pour from a logo"). Also settable via fluid.setEmitterMask(). */
+  mask?: MaskEmitterOptions
+}
+
+/** Rasterize text to a white-on-transparent canvas, for setEmitterMask()/setObstacle(). */
+export function textMask(
+  text: string,
+  opts: { font?: string; weight?: string | number; size?: number; aspect?: number } = {},
+): HTMLCanvasElement {
+  const aspect = opts.aspect ?? 2 // width/height of the mask canvas — stretched to fit yours
+  const w = 1024
+  const h = Math.round(w / aspect)
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  const g = c.getContext('2d')!
+  g.font = `${opts.weight ?? 800} ${Math.round((opts.size ?? 0.35) * h)}px ${opts.font ?? 'system-ui, sans-serif'}`
+  g.textAlign = 'center'
+  g.textBaseline = 'middle'
+  g.fillStyle = '#fff'
+  g.fillText(text, w / 2, h / 2)
+  return c
 }
 
 export interface FluidOptions extends Partial<FluidParams> {
@@ -67,6 +100,10 @@ export interface Fluid {
   /** Inject a droplet. x/y in [0,1] (y up), dx/dy velocity (pointer-flick scale ≈ 0–1000). */
   splat(x: number, y: number, dx: number, dy: number, opts?: SplatOptions): void
   setRenderMode(mode: RenderMode): void
+  /** Emit dye continuously from a mask's opaque pixels; null disables. */
+  setEmitterMask(source: MaskSource | null, opts?: { color?: Color; strength?: number }): void
+  /** Fluid flows around the mask's opaque pixels; null disables. */
+  setObstacle(source: MaskSource | null): void
   /** Clear all fields back to still, empty fluid. */
   reset(): void
   /** Render a frame and return it as a PNG data URL. */
@@ -118,6 +155,8 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
 
     progs = {
       copy: createProgram(gl!, sh.baseVertex, sh.copyFrag),
+      maskEmit: createProgram(gl!, sh.baseVertex, sh.maskEmitFrag),
+      obstacle: createProgram(gl!, sh.baseVertex, sh.obstacleFrag),
       splat: createProgram(gl!, sh.baseVertex, sh.splatFrag),
       gravity: createProgram(gl!, sh.baseVertex, sh.gravityFrag),
       advection: createProgram(gl!, sh.baseVertex, sh.advectionFrag),
@@ -250,6 +289,18 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
     gl!.uniform1f(un.dissipation, params.densityDissipation)
     blit(dyeField.write)
     dyeField.swap()
+
+    if (obstacleMask) {
+      // ponytail: velocity-only obstacle — gravity/wind drift can still seep dye through slowly;
+      // mask the drift in the advection shader if that ever shows
+      un = u(progs.obstacle)
+      gl!.uniform1i(un.uVelocity, velocity.read.attach(0))
+      gl!.activeTexture(gl!.TEXTURE1)
+      gl!.bindTexture(gl!.TEXTURE_2D, obstacleMask.tex)
+      gl!.uniform1i(un.uMask, 1)
+      blit(velocity.write)
+      velocity.swap()
+    }
   }
 
   function render(time: number) {
@@ -262,6 +313,67 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
     if (un.uTime) gl!.uniform1f(un.uTime, time)
     renderMode.apply?.(gl!, un)
     blit(null)
+  }
+
+  // ---- masks (emitter + obstacle) ----
+  interface MaskState { tex: WebGLTexture; color: [number, number, number]; strength: number }
+  let emitterMask: MaskState | null = null
+  let obstacleMask: { tex: WebGLTexture } | null = null
+
+  function uploadMask(source: TexImageSource): WebGLTexture {
+    const tex = gl!.createTexture()!
+    gl!.activeTexture(gl!.TEXTURE0)
+    gl!.bindTexture(gl!.TEXTURE_2D, tex)
+    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MIN_FILTER, gl!.LINEAR)
+    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MAG_FILTER, gl!.LINEAR)
+    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_S, gl!.CLAMP_TO_EDGE)
+    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_T, gl!.CLAMP_TO_EDGE)
+    gl!.pixelStorei(gl!.UNPACK_FLIP_Y_WEBGL, true) // mask uv matches the y-up field uv
+    gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, gl!.RGBA, gl!.UNSIGNED_BYTE, source)
+    gl!.pixelStorei(gl!.UNPACK_FLIP_Y_WEBGL, false)
+    return tex
+  }
+
+  function withMaskSource(source: MaskSource, cb: (s: TexImageSource) => void) {
+    if (typeof source === 'string') {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.onload = () => cb(img)
+      img.src = source
+    } else cb(source)
+  }
+
+  function setEmitterMask(source: MaskSource | null, opts: { color?: Color; strength?: number } = {}) {
+    if (emitterMask) { gl!.deleteTexture(emitterMask.tex); emitterMask = null }
+    if (!source) return
+    withMaskSource(source, s => {
+      emitterMask = {
+        tex: uploadMask(s),
+        color: opts.color ? parseColor(opts.color) : [0.4, 0.4, 0.4],
+        strength: opts.strength ?? 1,
+      }
+    })
+  }
+
+  function setObstacle(source: MaskSource | null) {
+    if (obstacleMask) { gl!.deleteTexture(obstacleMask.tex); obstacleMask = null }
+    if (!source) return
+    withMaskSource(source, s => { obstacleMask = { tex: uploadMask(s) } })
+  }
+
+  function applyMaskEmission(dt: number) {
+    if (!emitterMask) return
+    const un = progs.maskEmit.uniforms
+    gl!.useProgram(progs.maskEmit.program)
+    gl!.uniform1i(un.uTarget, dyeField.read.attach(0))
+    gl!.activeTexture(gl!.TEXTURE1)
+    gl!.bindTexture(gl!.TEXTURE_2D, emitterMask.tex)
+    gl!.uniform1i(un.uMask, 1)
+    const [r, g, b] = emitterMask.color
+    gl!.uniform3f(un.color, r, g, b)
+    gl!.uniform1f(un.amount, emitterMask.strength * dt)
+    blit(dyeField.write)
+    dyeField.swap()
   }
 
   // ---- splats ----
@@ -412,7 +524,10 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
     for (const s of splatQueue) applySplat(s)
     splatQueue.length = 0
     const sdt = dt * params.speed
-    if (sdt > 0) step(sdt)
+    if (sdt > 0) {
+      applyMaskEmission(sdt)
+      step(sdt)
+    }
     render(now / 1000)
   }
 
@@ -449,6 +564,7 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
   // Size the canvas before first FBO allocation so grids match the real aspect.
   resizeIfNeeded()
   initGL()
+  if (emitterOpts.mask) setEmitterMask(emitterOpts.mask.source, emitterOpts.mask)
   ensureLoop()
 
   return {
@@ -462,6 +578,8 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
       })
     },
     setRenderMode(mode) { setRenderMode(mode) },
+    setEmitterMask,
+    setObstacle,
     reset() {
       gl!.clearColor(0, 0, 0, 0)
       for (const f of [velocity.read, velocity.write, dyeField.read, dyeField.write,
@@ -496,6 +614,8 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
       velocity.dispose(); dyeField.dispose(); pressure.dispose()
       divergence.dispose(); curl.dispose()
       renderMode.dispose?.(gl!)
+      setEmitterMask(null)
+      setObstacle(null)
       for (const p of Object.values(progs)) gl!.deleteProgram(p.program)
       if (displayProg) gl!.deleteProgram(displayProg.program)
       gl!.deleteBuffer(quadBuf)

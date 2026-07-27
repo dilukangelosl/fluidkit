@@ -62,6 +62,36 @@ void main () {
     fragColor = texture(uSource, coord) / (1.0 + dissipation * dt);
 }`
 
+// Continuously adds dye wherever the mask is opaque/bright ("pour from a logo").
+export const maskEmitFrag = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uTarget;
+uniform sampler2D uMask;
+uniform vec3 color;
+uniform float amount;
+
+void main () {
+    vec4 m = texture(uMask, vUv);
+    float coverage = m.a * max(m.r, max(m.g, m.b)); // white-on-transparent and white-on-black both work
+    fragColor = vec4(texture(uTarget, vUv).xyz + color * coverage * amount, 1.0);
+}`
+
+// Zeroes velocity inside the obstacle so flow wraps around the shape.
+export const obstacleFrag = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uVelocity;
+uniform sampler2D uMask;
+
+void main () {
+    vec4 m = texture(uMask, vUv);
+    float solid = clamp(m.a * max(m.r, max(m.g, m.b)) * 4.0, 0.0, 1.0);
+    fragColor = vec4(texture(uVelocity, vUv).xy * (1.0 - solid), 0.0, 1.0);
+}`
+
 export const copyFrag = /* glsl */ `#version 300 es
 precision highp float;
 in vec2 vUv;
