@@ -20,11 +20,24 @@ precision highp float;
 in vec2 vUv;
 out vec4 fragColor;
 uniform sampler2D uDye;
+uniform vec2 texelSize;
 uniform float uBrightness;
+uniform float uGlow;
+uniform float uGlowRadius;
 uniform vec4 uBackground; // a=1 → composite over this color, a=0 → transparent output
 
 void main () {
     vec3 c = texture(uDye, vUv).rgb * uBrightness;
+    if (uGlow > 0.001) {
+        // ponytail: 12-tap spiral halo, not a real downsampled bloom chain — upgrade if wide glows band
+        vec3 acc = vec3(0.0);
+        for (int i = 0; i < 12; i++) {
+            float ang = float(i) * 2.4;
+            float r = (0.2 + 0.8 * float(i) / 11.0) * uGlowRadius;
+            acc += texture(uDye, vUv + vec2(cos(ang), sin(ang)) * r * texelSize).rgb;
+        }
+        c += acc * (uGlow / 12.0);
+    }
     if (uBackground.a > 0.5) {
         fragColor = vec4(uBackground.rgb + c, 1.0); // additive over background
     } else {
@@ -36,6 +49,10 @@ void main () {
 export interface DyeOptions {
   /** Multiplier on dye color. Default 1. */
   brightness?: number
+  /** Neon halo strength (0..~1.5). Default 0 = off. */
+  glow?: number
+  /** Halo radius in pixels. Default 24. */
+  glowRadius?: number
   /** Solid backdrop composited in-shader; 'transparent' (default) outputs alpha. */
   background?: Color | 'transparent'
 }
@@ -43,6 +60,8 @@ export interface DyeOptions {
 /** Classic smoky multicolor dye. */
 export function dye(opts: DyeOptions = {}): RenderMode {
   const brightness = opts.brightness ?? 1
+  const glow = opts.glow ?? 0
+  const glowRadius = opts.glowRadius ?? 24
   const bg =
     !opts.background || opts.background === 'transparent'
       ? [0, 0, 0, 0]
@@ -52,7 +71,53 @@ export function dye(opts: DyeOptions = {}): RenderMode {
     frag: dyeFrag,
     apply(gl, u) {
       gl.uniform1f(u.uBrightness, brightness)
+      gl.uniform1f(u.uGlow, glow)
+      gl.uniform1f(u.uGlowRadius, glowRadius)
       gl.uniform4f(u.uBackground, bg[0], bg[1], bg[2], bg[3])
+    },
+  }
+}
+
+// ---------------------------------------------------------------- ramp
+
+const rampFrag = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uDye;
+uniform vec3 uStops[8];
+uniform int uStopCount;
+uniform float uScale;
+
+void main () {
+    float lum = dot(texture(uDye, vUv).rgb, vec3(0.299, 0.587, 0.114));
+    float t = clamp(lum * uScale, 0.0, 1.0) * float(uStopCount - 1);
+    int i = int(floor(t));
+    vec3 col = mix(uStops[i], uStops[min(i + 1, uStopCount - 1)], fract(t));
+    fragColor = vec4(col, 1.0);
+}`
+
+export interface RampOptions {
+  /** 2–8 colors, darkest first — dye luminance is mapped through this gradient. */
+  colors: Color[]
+  /** Luminance multiplier before mapping. Default 1. */
+  scale?: number
+}
+
+/** Gradient-map: dye density drives a color ramp (colors[0] is the background). */
+export function ramp(colorsOrOpts: Color[] | RampOptions): RenderMode {
+  const opts = Array.isArray(colorsOrOpts) ? { colors: colorsOrOpts } : colorsOrOpts
+  const stops = opts.colors.slice(0, 8).map(parseColor)
+  const flat = new Float32Array(24)
+  stops.forEach((c, i) => flat.set(c, i * 3))
+  const scale = opts.scale ?? 1
+  return {
+    name: 'ramp',
+    frag: rampFrag,
+    apply(gl, u) {
+      gl.uniform3fv(u.uStops, flat)
+      gl.uniform1i(u.uStopCount, stops.length)
+      gl.uniform1f(u.uScale, scale)
     },
   }
 }
@@ -71,9 +136,13 @@ uniform vec4 uBackground;
 uniform vec4 uOutline;       // rgb + opacity
 uniform float uOutlineWidth; // in AA-widths; 0 = off
 uniform float uSoftness;     // edge AA multiplier
+uniform vec2 texelSize;
+uniform vec4 uLight;         // xy = direction, z = bump strength (0 = off), w = specular
+
+const vec3 LUMA = vec3(0.299, 0.587, 0.114);
 
 void main () {
-    float lum = dot(texture(uDye, vUv).rgb, vec3(0.299, 0.587, 0.114));
+    float lum = dot(texture(uDye, vUv).rgb, LUMA);
     float aa = (fwidth(lum) + 1e-4) * uSoftness;
     vec4 col = uBackground;
     float edge = 0.0;
@@ -85,6 +154,20 @@ void main () {
             float d = abs(lum - uCutoff[i]);
             edge = max(edge, 1.0 - smoothstep(0.0, aa * uOutlineWidth, d));
         }
+    }
+    if (uLight.z > 0.0) {
+        // "wet jelly" shading: fake a surface normal from the dye density gradient
+        vec2 ts = texelSize * 2.0;
+        float hx = dot(texture(uDye, vUv + vec2(ts.x, 0.0)).rgb, LUMA)
+                 - dot(texture(uDye, vUv - vec2(ts.x, 0.0)).rgb, LUMA);
+        float hy = dot(texture(uDye, vUv + vec2(0.0, ts.y)).rgb, LUMA)
+                 - dot(texture(uDye, vUv - vec2(0.0, ts.y)).rgb, LUMA);
+        vec3 n = normalize(vec3(-hx * uLight.z, -hy * uLight.z, 1.0));
+        vec3 L = normalize(vec3(uLight.xy, 0.9));
+        float diff = 0.7 + 0.3 * max(dot(n, L), 0.0);
+        float spec = pow(max(reflect(-L, n).z, 0.0), 32.0) * uLight.w;
+        float inside = smoothstep(uCutoff[0] - aa, uCutoff[0] + aa, lum);
+        col.rgb = col.rgb * mix(1.0, diff, inside) + spec * inside;
     }
     col = mix(col, vec4(uOutline.rgb, 1.0), edge * uOutline.a);
     fragColor = vec4(col.rgb * col.a, col.a); // premultiply for canvas compositing
@@ -106,6 +189,8 @@ export interface ThresholdOptions {
   outline?: { color: Color; width?: number; opacity?: number }
   /** Edge anti-aliasing multiplier. 1 = crisp (default), 3–8 = soft/blurry edges. */
   softness?: number
+  /** Wet/jelly shading: gradient-derived normal with diffuse + specular highlight. */
+  lighting?: { strength?: number; specular?: number; direction?: [number, number] }
 }
 
 /** Posterized flat "sticker liquid" look (the Slosh effect). */
@@ -127,6 +212,9 @@ export function threshold(opts: ThresholdOptions): RenderMode {
   const outlineWidth = opts.outline ? (opts.outline.width ?? 3) : 0
   const outlineOpacity = opts.outline?.opacity ?? 1
   const softness = opts.softness ?? 1
+  const lightDir = opts.lighting?.direction ?? [-0.6, 0.8]
+  const lightStrength = opts.lighting ? (opts.lighting.strength ?? 3) : 0
+  const lightSpecular = opts.lighting?.specular ?? 0.6
   return {
     name: 'threshold',
     frag: thresholdFrag,
@@ -138,6 +226,7 @@ export function threshold(opts: ThresholdOptions): RenderMode {
       gl.uniform4f(u.uOutline, oc[0], oc[1], oc[2], outlineOpacity)
       gl.uniform1f(u.uOutlineWidth, outlineWidth)
       gl.uniform1f(u.uSoftness, softness)
+      gl.uniform4f(u.uLight, lightDir[0], lightDir[1], lightStrength, lightSpecular)
     },
   }
 }

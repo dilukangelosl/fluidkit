@@ -6,10 +6,10 @@ import * as sh from './shaders.js'
 import { dye, type RenderMode } from './render.js'
 import { DEFAULTS, parseColor, hsv, computeResolution, type FluidParams, type Color } from './utils.js'
 
-export { dye, threshold, custom, displacement } from './render.js'
+export { dye, threshold, custom, displacement, ramp } from './render.js'
 export type {
   RenderMode, ThresholdLevel, ThresholdOptions, CustomOptions,
-  DyeOptions, DisplacementOptions,
+  DyeOptions, DisplacementOptions, RampOptions,
 } from './render.js'
 export { DEFAULTS, parseColor, computeResolution } from './utils.js'
 export type { FluidParams, Color } from './utils.js'
