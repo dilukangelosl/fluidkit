@@ -26,11 +26,11 @@ but only call `createFluid` in browser lifecycle hooks (`useEffect`, `onMounted`
 Always call `fluid.destroy()` on unmount.
 
 ```tsx
-// React pattern (no wrapper package yet)
-useEffect(() => {
-  const fluid = createFluid(canvasRef.current, { render: threshold({ ... }) })
-  return () => fluid.destroy()
-}, [])
+// React: use the built-in wrapper
+import { FluidCanvas } from '@dilukangelo/fluidkit/react'
+<FluidCanvas render={threshold({ ... })} emitters={{ pointer: true }} className="hero-bg"
+  onReady={fluid => { /* splats, fluid.params, masks */ }} />
+// Options are read at mount; tune live via onReady. Or manage createFluid/destroy yourself.
 ```
 
 ## API surface
@@ -60,8 +60,15 @@ createFluid(canvas, {
 fluid.splat(x, y, dx, dy, { color, radius })  // x,y in [0,1], y UP (0 = bottom). dx,dy ≈ ±800
 fluid.params.curl = 45                        // every sim param is live-tunable
 fluid.setRenderMode(mode)                     // swap looks at runtime
+fluid.setEmitterMask(src, { color, strength })// dye pours from a text/image mask; null = off
+fluid.setObstacle(src)                        // fluid flows AROUND the mask; null = off
+fluid.reset()                                 // clear the fields
+fluid.screenshot()                            // PNG data URL of the current look
 fluid.getTexture('dye' | 'velocity' | 'pressure') // WebGLTexture for three.js/pixi
 fluid.pause(); fluid.resume(); fluid.destroy()
+
+textMask('your brand', { size: 0.35, weight: 900, font: 'system-ui', aspect: 2 })
+// → white-on-transparent canvas for setEmitterMask/setObstacle
 ```
 
 Sim params (defaults): `simResolution` 128, `dyeResolution` 1024, `curl` 30,
@@ -105,8 +112,29 @@ displacement({
 // pair with params { curl: 4, velocityDissipation: 0.3 } for glassy ripples
 ```
 
-**Dye options:** `dye({ brightness: 1.4, background: '#0b0b12' })` — brightness multiplies
-the smoke; background composites in-shader ('transparent' default).
+**Dye options:** `dye({ brightness: 1.4, glow: 0.9, glowRadius: 32, background: '#0b0b12' })` —
+brightness multiplies the smoke, glow adds a neon halo, background composites in-shader.
+
+**Gradient-map (`ramp()`):** `ramp(['#0b0212', '#4a0f5e', '#c0245e', '#ffe8d6'])` — dye
+density mapped through a color ramp (first color = background). The easiest way to hit
+exact brand colors. `ramp({ colors, scale: 1.4 })` boosts contrast.
+
+**Wet-jelly lighting:** `threshold({ ..., lighting: { strength: 5, specular: 0.9 } })` —
+fakes a 3D surface from the dye gradient. Turns flat liquid into glossy slime.
+
+**Logo effects (the signature moves):**
+```ts
+// The wordmark bleeds/melts liquid:
+fluid.setEmitterMask(textMask('brandname', { size: 0.32, weight: 900 }),
+  { color: [0.5, 0.18, 0.3], strength: 8 })
+fluid.params.gravity = 120
+// Pour dye over invisible text — letters appear as negative space:
+fluid.setObstacle(textMask('FLOW', { size: 0.42 }))
+// + emit splats from the top with gravity ~240
+```
+Mask emitter tuning: strength must outpace both densityDissipation and gravity
+(strength 5–10 with gravity 100–200). The mask stretches to the canvas — match
+`aspect` to your canvas shape for undistorted letterforms.
 
 ## Recipes for landing pages
 

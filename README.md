@@ -50,11 +50,14 @@ Sim params (all optional in `createFluid` options, all live-tunable via `fluid.p
 
 ### Render modes
 
-- `dye({ brightness, background })` — classic smoky multicolor.
-- `threshold({ levels, background, outline, softness })` — up to 8 posterized levels with
-  per-level alpha, edge AA, and an optional comic/sticker outline stroke (the "Slosh" look).
-- `displacement({ source, strength, chromatic })` — the flow field distorts an image or
-  canvas with optional chromatic aberration (refraction/glass effects).
+- `dye({ brightness, glow, glowRadius, background })` — classic smoky multicolor, with an
+  optional neon halo.
+- `threshold({ levels, background, outline, softness, lighting })` — up to 8 posterized
+  levels with per-level alpha, edge AA, comic/sticker outline stroke, and wet-jelly
+  lighting (gradient-derived normal + specular).
+- `ramp(['#0b0212', '#c0245e', '#ffe8d6'])` — gradient-map: dye density drives a color ramp.
+- `displacement({ source, strength, chromatic })` — the flow field distorts an image,
+  canvas, or video with optional chromatic aberration (refraction/glass effects).
 - `custom({ frag, uniforms })` — your GLSL ES 3.00 fragment shader; sample `uDye`, `uVelocity`,
   `uPressure`, use `uTime` and `texelSize`.
 
@@ -63,11 +66,26 @@ Sim params (all optional in `createFluid` options, all live-tunable via `fluid.p
 - `pointer: true | { color, intensity, radius, dragOnly }` — fixed color or palette per
   pointer, dye density, hover vs drag.
 - `ambient: true | { strength, count, colors, radius }` — configurable autonomous wanderers.
+- `fluid.setEmitterMask(textMask('your logo'), { color, strength })` — dye pours out of any
+  text or image mask.
+- `fluid.setObstacle(textMask('FLOW'))` — fluid flows *around* the mask; letters appear as
+  negative space.
 - `splat()` for anything programmatic, or the `onFrame(t, dt)` option to drive emitters
   without managing your own loop.
 
 Sim extras: `gravity` (pours), `wind` (side drift), `speed` (slow motion / time scale) —
-all live-tunable via `fluid.params`.
+all live-tunable via `fluid.params`. `autoQuality` (on by default) halves dye resolution
+under sustained frame overruns. `fluid.reset()` clears the fields; `fluid.screenshot()`
+returns a PNG data URL; resizes preserve the fluid instead of flashing empty.
+
+### React
+
+```tsx
+import { FluidCanvas } from '@dilukangelo/fluidkit/react'
+
+<FluidCanvas render={threshold({ ... })} emitters={{ pointer: true }} className="hero-bg"
+  onReady={fluid => fluid.splat(0.5, 0.5, 0, 400)} />
+```
 
 ### Behavior you get for free
 
@@ -85,7 +103,11 @@ The [demo](https://fluidkit-chi.vercel.app/) ships eleven looks, all driven thro
 `dye` smoky multicolor · `threshold` posterized purple · `custom` ink-on-paper ·
 `soda` pink liquid pour · `waterfall` raining streams · `fountain` rainbow jet ·
 `goo` outlined metaball cursor · `aurora` hover-reveal · `chrome` liquid iridescence ·
-`contour` living topographic map · `refract` image distortion · `hero` typography over fluid
+`contour` living topographic map · `neon` glowing smoke · `lava` gradient-map ·
+`jelly` lit slime · `logo` melting wordmark · `collide` flow around invisible text ·
+`refract` image distortion · `hero` typography over fluid
+
+Hit **tune** in the demo for live sliders over every sim param + copy-config.
 
 ## Develop
 
