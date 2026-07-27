@@ -6,8 +6,12 @@ This file tells you everything you need — you should not need to read the libr
 
 ## Setup
 
+```sh
+npm install @dilukangelosl/fluidkit
+```
+
 ```ts
-import { createFluid, dye, threshold, custom } from 'fluidkit'
+import { createFluid, dye, threshold, custom } from '@dilukangelosl/fluidkit'
 
 const fluid = createFluid(canvas, options)
 ```
