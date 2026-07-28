@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="512" viewBox="0 0 1024 512">
+  <!-- fluidkit logomark: droplet + wordmark. White-on-transparent so it doubles as an emitter mask. -->
+  <g fill="#ffffff">
+    <path d="M225 84c0 0-101 140-101 220a101 101 0 0 0 202 0c0-80-101-220-101-220z"/>
+    <circle cx="196" cy="322" r="26" fill-opacity="0.35"/>
+    <text x="380" y="352" font-family="Arial, Helvetica, sans-serif" font-size="152" font-weight="800" letter-spacing="-4">fluidkit</text>
+  </g>
+</svg>

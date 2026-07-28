@@ -14,7 +14,7 @@ interface Example {
   params?: Partial<typeof fluid.params>
   tick?(t: number): void
   background?: string
-  overlay?: boolean
+  overlay?: 'hero' | 'logo'
   light?: boolean // light background — flips nav/footer chrome for contrast
   enter?(): void // set masks/obstacles; select() clears them before calling
 }
@@ -218,12 +218,11 @@ void main () {
     }),
     background: '#f6eee3',
     light: true,
+    overlay: 'logo', // the crisp SVG logo sits on top; liquid bleeds out from behind it
     params: { dyeResolution: 256, curl: 3, gravity: 120, densityDissipation: 0.45, velocityDissipation: 0.2 },
     enter() {
-      fluid.setEmitterMask(textMask('fluidkit', { size: 0.32, weight: 900 }), {
-        color: [0.5, 0.18, 0.3],
-        strength: 8,
-      })
+      // a real image logo as the emitter mask — any white-on-transparent SVG/PNG works
+      fluid.setEmitterMask('/logo.svg', { color: [0.5, 0.18, 0.3], strength: 8 })
     },
   },
 
@@ -267,7 +266,7 @@ void main () {
       background: 'transparent',
     }),
     background: '#0b0b12',
-    overlay: true,
+    overlay: 'hero',
     params: { dyeResolution: 256, curl: 2, densityDissipation: 0.2, velocityDissipation: 0.2 },
     tick(t) {
       if (Math.floor(t * 2) % 3 === 0) {
@@ -310,7 +309,10 @@ function hsv015(h: number): [number, number, number] {
 
 // ---- navigation (built from the examples table) ----
 const nav = document.getElementById('modes')!
-const overlay = document.getElementById('hero-overlay') as HTMLElement
+const overlays = {
+  hero: document.getElementById('hero-overlay') as HTMLElement,
+  logo: document.getElementById('logo-overlay') as HTMLElement,
+}
 let active: Example = examples.dye
 
 function select(name: string) {
@@ -323,7 +325,7 @@ function select(name: string) {
   active.enter?.()
   document.body.style.background = active.background ?? '#0b0b12'
   document.body.classList.toggle('light', !!active.light)
-  overlay.hidden = !active.overlay
+  for (const [k, el] of Object.entries(overlays)) el.hidden = active.overlay !== k
   nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.name === name))
   syncPanel()
 }
