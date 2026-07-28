@@ -180,8 +180,8 @@ void main () {
 
   // Neon: the classic look with a glow halo.
   neon: {
-    render: dye({ glow: 0.9, glowRadius: 32, brightness: 1.1 }),
-    params: { curl: 45, densityDissipation: 1.2 },
+    render: dye({ glow: 1.4, glowRadius: 48, brightness: 1.3 }),
+    params: { curl: 45, densityDissipation: 1.6 }, // fast fade = thin bright trails, big halo
   },
 
   // Gradient-map: dye density drives a lava color ramp.
@@ -194,15 +194,16 @@ void main () {
   jelly: {
     render: threshold({
       levels: [
-        { cutoff: 0.15, color: '#14380f' },
-        { cutoff: 0.4, color: '#3fae3f' },
-        { cutoff: 1.1, color: '#c7ff9e' },
+        { cutoff: 0.12, color: '#1d5c14' },
+        { cutoff: 0.35, color: '#3fae3f' },
+        { cutoff: 0.8, color: '#a5e87b' },
       ],
-      background: '#090d07',
-      lighting: { strength: 5, specular: 0.9 },
+      background: '#0a0f08',
+      lighting: { strength: 8, specular: 1.1 },
     }),
-    background: '#090d07',
-    params: { dyeResolution: 192, curl: 2, densityDissipation: 0.35, velocityDissipation: 0.3, splatRadius: 0.4 },
+    background: '#0a0f08',
+    // dissipation keeps blobs finite — saturated flat sheets have no gradient for the lighting to shade
+    params: { dyeResolution: 192, curl: 1, densityDissipation: 1.2, velocityDissipation: 0.3, splatRadius: 0.5 },
   },
 
   // "Pour from a logo": the word itself bleeds liquid, pulled down by gravity.
@@ -318,6 +319,7 @@ function select(name: string) {
   fluid.setEmitterMask(null)
   fluid.setObstacle(null)
   Object.assign(fluid.params, DEFAULTS, active.params)
+  fluid.reset() // each example starts from clean fluid, not the previous mode's leftovers
   active.enter?.()
   document.body.style.background = active.background ?? '#0b0b12'
   document.body.classList.toggle('light', !!active.light)
