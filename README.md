@@ -11,9 +11,9 @@ Framework-agnostic GPU fluid simulation for the web. The sim engine (Stable Flui
 produces velocity/dye field textures; pluggable render modes consume them — smoky dye, flat
 posterized "sticker" liquid, or your own fragment shader.
 
-**Status: v0.1** — WebGL2 backend, `dye` / `threshold` / `custom` render modes, pointer +
-programmatic + ambient emitters. WebGPU backend, displacement mode, and a React wrapper
-are on the roadmap.
+**Status: v0.4** — WebGL2 backend; five render modes (`dye`, `threshold`, `ramp`,
+`displacement`, `custom`); pointer, ambient, programmatic, mask, and audio emitters;
+obstacles; React/Vue/Svelte adapters; CDN build. The WebGPU backend is the roadmap headline.
 
 > **Building with an AI coding agent?** Point it at [AGENTS.md](./AGENTS.md) — a complete
 > guide with landing-page recipes, the liquid-vs-smoke look formula, and pitfalls.
@@ -51,7 +51,8 @@ fluid.pause(); fluid.resume(); fluid.destroy()
 Sim params (all optional in `createFluid` options, all live-tunable via `fluid.params`):
 `simResolution` (128), `dyeResolution` (1024), `curl` (30), `pressureIterations` (20),
 `pressure` (0.8), `velocityDissipation` (0.2), `densityDissipation` (1.0),
-`gravity` (0 — set 100–400 for pours/waterfalls), `splatRadius` (0.25), `splatForce` (6000).
+`gravity` (0 — set 100–400 for pours/waterfalls), `wind` (0), `speed` (1),
+`splatRadius` (0.25), `splatForce` (6000).
 
 ### Render modes
 
@@ -122,7 +123,7 @@ Masks accept videos or `live: true` canvases — an animated logo that pours whi
 
 ## Examples
 
-The [demo](https://fluidkit-chi.vercel.app/) ships eleven looks, all driven through the public API
+The [demo](https://fluidkit-chi.vercel.app/) ships twenty looks, all driven through the public API
 (source in [`demo/main.ts`](./demo/main.ts) — each is a copy-paste starting point):
 
 `dye` smoky multicolor · `threshold` posterized purple · `custom` ink-on-paper ·
