@@ -2,6 +2,8 @@
 
 **[Live demo →](https://fluidkit-chi.vercel.app/)** · [npm](https://www.npmjs.com/package/@dilukangelo/fluidkit)
 
+![fluidkit demo](assets/demo.gif)
+
 | ![melting logo](assets/logo.png) | ![wet jelly](assets/jelly.png) |
 |---|---|
 | ![lava gradient-map](assets/lava.png) | ![flow around text](assets/collide.png) |
