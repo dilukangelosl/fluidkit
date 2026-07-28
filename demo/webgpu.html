@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>fluidkit — WebGPU backend (experimental)</title>
+  <link rel="icon" href="data:," />
+  <style>
+    html, body { margin: 0; height: 100%; background: #0b0b12; overflow: hidden; }
+    canvas { width: 100vw; height: 100vh; display: block; touch-action: none; }
+    #badge { position: fixed; top: 12px; left: 12px; color: #fff; font-family: system-ui; font-size: 0.9rem;
+      background: #ffffff1c; border: 1px solid #ffffff30; border-radius: 999px; padding: 6px 14px; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="badge">webgpu: checking…</div>
+  <script type="module" src="./webgpu-main.ts"></script>
+</body>
+</html>

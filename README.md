@@ -13,9 +13,10 @@ Framework-agnostic GPU fluid simulation for the web. The sim engine (Stable Flui
 produces velocity/dye field textures; pluggable render modes consume them — smoky dye, flat
 posterized "sticker" liquid, or your own fragment shader.
 
-**Status: v0.4** — WebGL2 backend; five render modes (`dye`, `threshold`, `ramp`,
+**Status: v0.5** — WebGL2 core with five render modes (`dye`, `threshold`, `ramp`,
 `displacement`, `custom`); pointer, ambient, programmatic, mask, and audio emitters;
-obstacles; React/Vue/Svelte adapters; CDN build. The WebGPU backend is the roadmap headline.
+obstacles; React/Vue/Svelte adapters; CDN build; **experimental WebGPU backend**
+([try it](https://fluidkit-chi.vercel.app/webgpu.html)).
 
 > **Building with an AI coding agent?** Point it at [AGENTS.md](./AGENTS.md) — a complete
 > guide with landing-page recipes, the liquid-vs-smoke look formula, and pitfalls.
@@ -122,6 +123,20 @@ Masks accept videos or `live: true` canvases — an animated logo that pours whi
 - Recovers from WebGL context loss; resizes with the canvas; multiple instances per page;
   `destroy()` releases all GPU resources.
 - SSR-safe: importing the package touches no browser globals.
+
+### WebGPU (experimental)
+
+```ts
+import { createFluidGPU, isWebGPUSupported } from '@dilukangelo/fluidkit/webgpu'
+
+const fluid = isWebGPUSupported()
+  ? await createFluidGPU(canvas, { emitters: { pointer: true } })
+  : createFluid(canvas) // WebGL2 fallback
+```
+
+The full sim pass graph ported to WGSL compute. v0 scope: dye rendering + pointer/ambient/
+programmatic splats + all live sim params (gravity, wind, speed included). Threshold/ramp/
+displacement/custom modes, masks, and obstacles remain WebGL2-only for now.
 
 ## Examples
 

@@ -48,6 +48,10 @@
     "./svelte": {
       "types": "./dist/svelte.d.ts",
       "import": "./dist/svelte.js"
+    },
+    "./webgpu": {
+      "types": "./dist/webgpu.d.ts",
+      "import": "./dist/webgpu.js"
     }
   },
   "files": [
@@ -65,6 +69,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.2.17",
+    "@webgpu/types": "^0.1.71",
     "playwright-core": "^1.62.0",
     "react": "^19.2.8",
     "typescript": "^5.7.0",

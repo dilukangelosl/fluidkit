@@ -88,6 +88,10 @@ Sim params (defaults): `simResolution` 128, `dyeResolution` 1024, `curl` 30,
 `densityDissipation` 1.0, `gravity` 0, `wind` 0 (horizontal dye drift, ± texels/s),
 `speed` 1 (time scale — 0.5 = slow motion), `splatRadius` 0.25, `splatForce` 6000.
 
+WebGPU (experimental): `const f = await createFluidGPU(canvas, opts)` from
+`@dilukangelo/fluidkit/webgpu` — dye look + splats + live params only; feature-detect with
+`isWebGPUSupported()` and fall back to `createFluid`. Prefer the WebGL2 core for anything styled.
+
 ## Choosing a look — the two aesthetics
 
 **Smoke/plasma (soft, glowy):** `dye()` render, `dyeResolution` 1024, `curl` 30–50.
