@@ -2,6 +2,11 @@
 
 **[Live demo →](https://fluidkit-chi.vercel.app/)** · [npm](https://www.npmjs.com/package/@dilukangelo/fluidkit)
 
+| ![melting logo](assets/logo.png) | ![wet jelly](assets/jelly.png) |
+|---|---|
+| ![lava gradient-map](assets/lava.png) | ![flow around text](assets/collide.png) |
+| ![neon glow](assets/neon.png) | ![refraction](assets/refract.png) |
+
 Framework-agnostic GPU fluid simulation for the web. The sim engine (Stable Fluids on WebGL2)
 produces velocity/dye field textures; pluggable render modes consume them — smoky dye, flat
 posterized "sticker" liquid, or your own fragment shader.
@@ -78,14 +83,34 @@ all live-tunable via `fluid.params`. `autoQuality` (on by default) halves dye re
 under sustained frame overruns. `fluid.reset()` clears the fields; `fluid.screenshot()`
 returns a PNG data URL; resizes preserve the fluid instead of flashing empty.
 
-### React
+### Framework adapters & extras
 
 ```tsx
+// React
 import { FluidCanvas } from '@dilukangelo/fluidkit/react'
-
-<FluidCanvas render={threshold({ ... })} emitters={{ pointer: true }} className="hero-bg"
-  onReady={fluid => fluid.splat(0.5, 0.5, 0, 400)} />
+<FluidCanvas render={threshold({ ... })} onReady={f => f.splat(0.5, 0.5, 0, 400)} />
 ```
+```html
+<!-- Vue 3 -->
+<FluidCanvas :options="{ render: ramp(['#000', '#f0f']) }" @ready="f => ..." />
+<!-- import { FluidCanvas } from '@dilukangelo/fluidkit/vue' -->
+
+<!-- Svelte (action, zero deps) -->
+<canvas use:fluid={{ render: dye({ glow: 1 }), onReady: f => ... }} />
+<!-- import { fluid } from '@dilukangelo/fluidkit/svelte' -->
+
+<!-- Plain script tag / CodePen -->
+<script src="https://unpkg.com/@dilukangelo/fluidkit/dist/fluidkit.iife.js"></script>
+<script> fluidkit.createFluid(canvas, { render: fluidkit.dye({ glow: 1 }) }) </script>
+```
+```ts
+// Sound-reactive: bass erupts from the bottom, treble sparkles on top
+import { createAudioEmitter } from '@dilukangelo/fluidkit/audio'
+const audio = await createAudioEmitter(fluid, { source: audioElement }) // omit source = microphone
+```
+
+`threshold({ bubbles: { density, rise, size } })` adds rising carbonation specks.
+Masks accept videos or `live: true` canvases — an animated logo that pours while it moves.
 
 ### Behavior you get for free
 

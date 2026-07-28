@@ -33,6 +33,17 @@ import { FluidCanvas } from '@dilukangelo/fluidkit/react'
 // Options are read at mount; tune live via onReady. Or manage createFluid/destroy yourself.
 ```
 
+Other adapters: `@dilukangelo/fluidkit/vue` (FluidCanvas component, `:options` + `@ready`),
+`@dilukangelo/fluidkit/svelte` (`use:fluid={{ ...options, onReady }}` action),
+CDN script tag `https://unpkg.com/@dilukangelo/fluidkit/dist/fluidkit.iife.js` → `window.fluidkit`.
+
+Sound reactivity: `const a = await createAudioEmitter(fluid, { source: mediaElement })` from
+`@dilukangelo/fluidkit/audio` — omit source for the microphone (prompts). `a.destroy()` to stop.
+
+Bubbles (soda carbonation): `threshold({ ..., bubbles: { density: 0.55, rise: 1, size: 0.035 } })`.
+Animated masks: pass a video (auto) or `{ live: true }` with a canvas you redraw —
+`fluid.setEmitterMask(videoEl)` re-uploads every frame.
+
 ## API surface
 
 ```ts
