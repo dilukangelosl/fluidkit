@@ -100,6 +100,8 @@ export interface Fluid {
   /** Inject a droplet. x/y in [0,1] (y up), dx/dy velocity (pointer-flick scale ≈ 0–1000). */
   splat(x: number, y: number, dx: number, dy: number, opts?: SplatOptions): void
   setRenderMode(mode: RenderMode): void
+  /** Reconfigure the ambient wanderers at runtime; false/null disables. */
+  setAmbient(opts: boolean | AmbientOptions | null): void
   /** Emit dye continuously from a mask's opaque pixels; null disables. live re-uploads each frame (video/animated canvas). */
   setEmitterMask(source: MaskSource | null, opts?: { color?: Color; strength?: number; live?: boolean }): void
   /** Fluid flows around the mask's opaque pixels; null disables. live re-uploads each frame. */
@@ -447,13 +449,23 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
           : (pOpts.color as Color[]).map(parseColor))
     : null
 
-  const aOpts: AmbientOptions | null =
+  let aOpts: AmbientOptions | null =
     emitterOpts.ambient === true ? {}
     : typeof emitterOpts.ambient === 'object' ? emitterOpts.ambient
     : null
-  const ambientStrength = aOpts ? (aOpts.strength ?? 0.2) : 0
-  const ambientRadiusMul = aOpts?.radius ?? 0.6
-  const ambientPalette = aOpts?.colors?.map(parseColor)
+  let ambientStrength = 0
+  let ambientRadiusMul = 0.6
+  let ambientPalette: [number, number, number][] | undefined
+  let agents: { seed: number; px: number; py: number }[] = []
+
+  function setAmbient(opts: boolean | AmbientOptions | null) {
+    aOpts = opts === true ? {} : opts === false ? null : opts
+    ambientStrength = aOpts ? (aOpts.strength ?? 0.2) : 0
+    ambientRadiusMul = aOpts?.radius ?? 0.6
+    ambientPalette = aOpts?.colors?.map(parseColor)
+    agents = Array.from({ length: aOpts?.count ?? 3 }, (_, i) => ({ seed: 17.3 * (i + 1), px: NaN, py: NaN }))
+  }
+  setAmbient(aOpts)
 
   const pointers = new Map<number, { x: number; y: number }>()
   function pointerColor(id: number): [number, number, number] {
@@ -479,7 +491,6 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
   function onPointerEnd(e: PointerEvent) { pointers.delete(e.pointerId) }
 
   // ponytail: lissajous wanderers stand in for curl noise — swap in simplex-curl if the paths read as too orbital
-  const agents = Array.from({ length: aOpts?.count ?? 3 }, (_, i) => ({ seed: 17.3 * (i + 1), px: NaN, py: NaN }))
   function ambientStep(t: number) {
     for (let i = 0; i < agents.length; i++) {
       const a = agents[i]
@@ -610,6 +621,7 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
       })
     },
     setRenderMode(mode) { setRenderMode(mode) },
+    setAmbient,
     setEmitterMask,
     setObstacle,
     reset() {

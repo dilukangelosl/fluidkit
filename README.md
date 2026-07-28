@@ -129,6 +129,7 @@ The [demo](https://fluidkit-chi.vercel.app/) ships eleven looks, all driven thro
 `soda` pink liquid pour · `waterfall` raining streams · `fountain` rainbow jet ·
 `goo` outlined metaball cursor · `aurora` hover-reveal · `chrome` liquid iridescence ·
 `contour` living topographic map · `neon` glowing smoke · `lava` gradient-map ·
+`smoke` gray plume in the wind · `fire` flame ramp · `fizz` carbonated seltzer ·
 `jelly` lit slime · `logo` melting wordmark · `collide` flow around invisible text ·
 `refract` image distortion · `hero` typography over fluid
 

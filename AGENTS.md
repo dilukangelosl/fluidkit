@@ -71,6 +71,7 @@ createFluid(canvas, {
 fluid.splat(x, y, dx, dy, { color, radius })  // x,y in [0,1], y UP (0 = bottom). dx,dy ≈ ±800
 fluid.params.curl = 45                        // every sim param is live-tunable
 fluid.setRenderMode(mode)                     // swap looks at runtime
+fluid.setAmbient({ strength, colors } | null)  // reconfigure/disable ambient wanderers live
 fluid.setEmitterMask(src, { color, strength })// dye pours from a text/image mask; null = off
 fluid.setObstacle(src)                        // fluid flows AROUND the mask; null = off
 fluid.reset()                                 // clear the fields

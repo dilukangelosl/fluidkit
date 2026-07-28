@@ -16,6 +16,7 @@ interface Example {
   background?: string
   overlay?: 'hero' | 'logo'
   light?: boolean // light background — flips nav/footer chrome for contrast
+  ambient?: false // opt out of the rainbow wanderers (tick-driven scenes keep their palette clean)
   enter?(): void // set masks/obstacles; select() clears them before calling
 }
 
@@ -78,6 +79,7 @@ void main () {
     background: '#f6eee3',
     light: true,
     // low dyeResolution = linear filtering smooths the field into metaball-like blobs
+    ambient: false,
     params: { dyeResolution: 256, densityDissipation: 0.3, velocityDissipation: 0.1, curl: 3, gravity: 220 },
     tick(t) {
       const x = 0.5 + 0.05 * Math.sin(t * 0.9) // the pour sways gently
@@ -96,6 +98,7 @@ void main () {
       background: '#08121f',
     }),
     background: '#08121f',
+    ambient: false,
     params: { densityDissipation: 1.1, velocityDissipation: 0.05, curl: 25, gravity: 320 },
     tick() {
       for (let i = 0; i < 2; i++) {
@@ -113,6 +116,52 @@ void main () {
       const hue = (t * 0.1) % 1
       const spread = 0.12 * Math.sin(t * 1.7)
       fluid.splat(0.5, 0.03, spread * 900, rnd(500, 700), { color: hsv015(hue), radius: 0.2 })
+    },
+  },
+
+  // Gray smoke plume rising off an ember, drifting with the wind.
+  smoke: {
+    render: dye({ brightness: 1.1 }),
+    ambient: false,
+    params: { curl: 50, densityDissipation: 0.7, velocityDissipation: 0.15, wind: 40 },
+    tick(t) {
+      const x = 0.35 + 0.04 * Math.sin(t * 1.3)
+      fluid.splat(x, 0.06, rnd(-20, 60), rnd(280, 460),
+        { color: [0.11, 0.11, 0.12], radius: rnd(0.12, 0.22) })
+    },
+  },
+
+  // Fire: dense rising jets mapped through a flame ramp — fast fade gives the licking tips.
+  fire: {
+    render: ramp({ colors: ['#0a0302', '#571e07', '#c1400b', '#ff9d1c', '#ffe9b0'], scale: 1.1 }),
+    ambient: false,
+    params: { curl: 38, densityDissipation: 2.2, velocityDissipation: 0.5 },
+    tick() {
+      for (let i = 0; i < 2; i++) {
+        fluid.splat(0.5 + rnd(-0.09, 0.09), 0.04, rnd(-80, 80), rnd(550, 850),
+          { color: [0.5, 0.34, 0.16], radius: rnd(0.1, 0.18) })
+      }
+    },
+  },
+
+  // Fizz: amber seltzer pooled at the bottom, carbonation streaming upward.
+  fizz: {
+    render: threshold({
+      levels: [
+        { cutoff: 0.1, color: '#b95d13' },
+        { cutoff: 0.3, color: '#f4881f' },
+        { cutoff: 0.75, color: '#ffe8b8' },
+      ],
+      background: '#160c04',
+      bubbles: { density: 0.85, rise: 1.6, size: 0.03, brightness: 0.4 },
+    }),
+    background: '#160c04',
+    ambient: false,
+    // gentle gravity: enough to settle, weak enough that the pool builds instead of draining
+    params: { dyeResolution: 256, curl: 4, gravity: 60, densityDissipation: 0.1, velocityDissipation: 0.3 },
+    tick() {
+      fluid.splat(rnd(0.1, 0.9), rnd(0.05, 0.28), rnd(-40, 40), rnd(-30, 30),
+        { color: [0.5, 0.27, 0.08], radius: 0.5 }) // keep the glass topped up
     },
   },
 
@@ -220,6 +269,7 @@ void main () {
     background: '#f6eee3',
     light: true,
     overlay: 'logo', // the crisp SVG logo sits on top; liquid bleeds out from behind it
+    ambient: false,
     params: { dyeResolution: 256, curl: 3, gravity: 120, densityDissipation: 0.45, velocityDissipation: 0.2 },
     enter() {
       // a real image logo as the emitter mask — any white-on-transparent SVG/PNG works
@@ -238,6 +288,7 @@ void main () {
       background: '#08121f',
     }),
     background: '#08121f',
+    ambient: false,
     params: { dyeResolution: 512, curl: 8, gravity: 240, densityDissipation: 0.3, velocityDissipation: 0.1 },
     enter() {
       fluid.setObstacle(textMask('FLOW', { size: 0.42, weight: 900 }))
@@ -268,6 +319,7 @@ void main () {
     }),
     background: '#0b0b12',
     overlay: 'hero',
+    ambient: false,
     params: { dyeResolution: 256, curl: 2, densityDissipation: 0.2, velocityDissipation: 0.2 },
     tick(t) {
       if (Math.floor(t * 2) % 3 === 0) {
@@ -322,6 +374,7 @@ function select(name: string) {
   fluid.setEmitterMask(null)
   fluid.setObstacle(null)
   Object.assign(fluid.params, DEFAULTS, active.params)
+  fluid.setAmbient(active.ambient === false ? null : { strength: 0.3 })
   fluid.reset() // each example starts from clean fluid, not the previous mode's leftovers
   active.enter?.()
   document.body.style.background = active.background ?? '#0b0b12'
