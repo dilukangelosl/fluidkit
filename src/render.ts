@@ -138,8 +138,14 @@ uniform float uOutlineWidth; // in AA-widths; 0 = off
 uniform float uSoftness;     // edge AA multiplier
 uniform vec2 texelSize;
 uniform vec4 uLight;         // xy = direction, z = bump strength (0 = off), w = specular
+uniform vec4 uBubbles;       // x density, y rise speed, z cell size, w brightness (0 = off)
+uniform float uTime;
 
 const vec3 LUMA = vec3(0.299, 0.587, 0.114);
+
+float hash21 (vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
 
 void main () {
     float lum = dot(texture(uDye, vUv).rgb, LUMA);
@@ -169,6 +175,19 @@ void main () {
         float inside = smoothstep(uCutoff[0] - aa, uCutoff[0] + aa, lum);
         col.rgb = col.rgb * mix(1.0, diff, inside) + spec * inside;
     }
+    if (uBubbles.w > 0.0) {
+        // procedural rising specks inside the liquid — the soda carbonation look
+        float inLiquid = smoothstep(uCutoff[0], uCutoff[0] + 0.1, lum);
+        vec2 p = vec2(vUv.x, vUv.y - uTime * uBubbles.y) / uBubbles.z;
+        vec2 cell = floor(p);
+        float h = hash21(cell);
+        if (h < uBubbles.x) {
+            vec2 c = vec2(fract(h * 13.7), fract(h * 7.31)) * 0.6 + 0.2;
+            float d = length(fract(p) - c);
+            float b = 1.0 - smoothstep(0.07, 0.15, d);
+            col.rgb += b * inLiquid * uBubbles.w;
+        }
+    }
     col = mix(col, vec4(uOutline.rgb, 1.0), edge * uOutline.a);
     fragColor = vec4(col.rgb * col.a, col.a); // premultiply for canvas compositing
 }`
@@ -191,6 +210,8 @@ export interface ThresholdOptions {
   softness?: number
   /** Wet/jelly shading: gradient-derived normal with diffuse + specular highlight. */
   lighting?: { strength?: number; specular?: number; direction?: [number, number] }
+  /** Rising carbonation specks inside the liquid (PRD's soda bubbles). */
+  bubbles?: { density?: number; rise?: number; size?: number; brightness?: number }
 }
 
 /** Posterized flat "sticker liquid" look (the Slosh effect). */
@@ -215,6 +236,10 @@ export function threshold(opts: ThresholdOptions): RenderMode {
   const lightDir = opts.lighting?.direction ?? [-0.6, 0.8]
   const lightStrength = opts.lighting ? (opts.lighting.strength ?? 3) : 0
   const lightSpecular = opts.lighting?.specular ?? 0.6
+  const bub = opts.bubbles
+  const bubbles: [number, number, number, number] = bub
+    ? [bub.density ?? 0.5, (bub.rise ?? 0.8) * 0.06, bub.size ?? 0.045, bub.brightness ?? 0.25]
+    : [0, 0, 1, 0]
   return {
     name: 'threshold',
     frag: thresholdFrag,
@@ -227,6 +252,7 @@ export function threshold(opts: ThresholdOptions): RenderMode {
       gl.uniform1f(u.uOutlineWidth, outlineWidth)
       gl.uniform1f(u.uSoftness, softness)
       gl.uniform4f(u.uLight, lightDir[0], lightDir[1], lightStrength, lightSpecular)
+      gl.uniform4f(u.uBubbles, bubbles[0], bubbles[1], bubbles[2], bubbles[3])
     },
   }
 }

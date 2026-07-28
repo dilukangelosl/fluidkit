@@ -100,10 +100,10 @@ export interface Fluid {
   /** Inject a droplet. x/y in [0,1] (y up), dx/dy velocity (pointer-flick scale ≈ 0–1000). */
   splat(x: number, y: number, dx: number, dy: number, opts?: SplatOptions): void
   setRenderMode(mode: RenderMode): void
-  /** Emit dye continuously from a mask's opaque pixels; null disables. */
-  setEmitterMask(source: MaskSource | null, opts?: { color?: Color; strength?: number }): void
-  /** Fluid flows around the mask's opaque pixels; null disables. */
-  setObstacle(source: MaskSource | null): void
+  /** Emit dye continuously from a mask's opaque pixels; null disables. live re-uploads each frame (video/animated canvas). */
+  setEmitterMask(source: MaskSource | null, opts?: { color?: Color; strength?: number; live?: boolean }): void
+  /** Fluid flows around the mask's opaque pixels; null disables. live re-uploads each frame. */
+  setObstacle(source: MaskSource | null, opts?: { live?: boolean }): void
   /** Clear all fields back to still, empty fluid. */
   reset(): void
   /** Render a frame and return it as a PNG data URL. */
@@ -323,9 +323,23 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
   }
 
   // ---- masks (emitter + obstacle) ----
-  interface MaskState { tex: WebGLTexture; color: [number, number, number]; strength: number }
+  interface MaskState {
+    tex: WebGLTexture
+    color: [number, number, number]
+    strength: number
+    src?: TexImageSource // kept when live — re-uploaded every frame (video/animated canvas)
+  }
   let emitterMask: MaskState | null = null
-  let obstacleMask: { tex: WebGLTexture } | null = null
+  let obstacleMask: { tex: WebGLTexture; src?: TexImageSource } | null = null
+
+  function refreshMask(tex: WebGLTexture, src: TexImageSource) {
+    if (src instanceof HTMLVideoElement && src.readyState < 2) return
+    gl!.activeTexture(gl!.TEXTURE0)
+    gl!.bindTexture(gl!.TEXTURE_2D, tex)
+    gl!.pixelStorei(gl!.UNPACK_FLIP_Y_WEBGL, true)
+    gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, gl!.RGBA, gl!.UNSIGNED_BYTE, src)
+    gl!.pixelStorei(gl!.UNPACK_FLIP_Y_WEBGL, false)
+  }
 
   function uploadMask(source: TexImageSource): WebGLTexture {
     const tex = gl!.createTexture()!
@@ -350,22 +364,32 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
     } else cb(source)
   }
 
-  function setEmitterMask(source: MaskSource | null, opts: { color?: Color; strength?: number } = {}) {
+  function setEmitterMask(source: MaskSource | null, opts: { color?: Color; strength?: number; live?: boolean } = {}) {
     if (emitterMask) { gl!.deleteTexture(emitterMask.tex); emitterMask = null }
     if (!source) return
     withMaskSource(source, s => {
+      const live = opts.live || (typeof HTMLVideoElement !== 'undefined' && s instanceof HTMLVideoElement)
       emitterMask = {
         tex: uploadMask(s),
         color: opts.color ? parseColor(opts.color) : [0.4, 0.4, 0.4],
         strength: opts.strength ?? 1,
+        src: live ? s : undefined,
       }
     })
   }
 
-  function setObstacle(source: MaskSource | null) {
+  function setObstacle(source: MaskSource | null, opts: { live?: boolean } = {}) {
     if (obstacleMask) { gl!.deleteTexture(obstacleMask.tex); obstacleMask = null }
     if (!source) return
-    withMaskSource(source, s => { obstacleMask = { tex: uploadMask(s) } })
+    withMaskSource(source, s => {
+      const live = opts.live || (typeof HTMLVideoElement !== 'undefined' && s instanceof HTMLVideoElement)
+      obstacleMask = { tex: uploadMask(s), src: live ? s : undefined }
+    })
+  }
+
+  function refreshLiveMasks() {
+    if (emitterMask?.src) refreshMask(emitterMask.tex, emitterMask.src)
+    if (obstacleMask?.src) refreshMask(obstacleMask.tex, obstacleMask.src)
   }
 
   function applyMaskEmission(dt: number) {
@@ -532,6 +556,7 @@ export function createFluid(canvas: HTMLCanvasElement, options: FluidOptions = {
     splatQueue.length = 0
     const sdt = dt * params.speed
     if (sdt > 0) {
+      refreshLiveMasks()
       applyMaskEmission(sdt)
       step(sdt)
     }
