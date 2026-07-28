@@ -73,6 +73,7 @@ void main () {
         { cutoff: 1.6, color: '#fff3f8' }, // foam core
       ],
       background: '#f6eee3',
+      bubbles: { density: 0.55, rise: 1, size: 0.035, brightness: 0.3 }, // carbonation
     }),
     background: '#f6eee3',
     light: true,
